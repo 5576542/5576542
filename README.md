@@ -24,7 +24,7 @@ local F=Instance.new("Frame")F.Size=UDim2.new(0,260,0,240)F.Position=UDim2.new(0
 Instance.new("UICorner",F).CornerRadius=UDim.new(0,12)
 local T=Instance.new("Frame")T.Size=UDim2.new(1,0,0,28)T.BackgroundColor3=Color3.new(0.1,0.1,0.18)T.BackgroundTransparency=0.3 T.Parent=F
 Instance.new("UICorner",T).CornerRadius=UDim.new(0,12)
-local TL=Instance.new("TextLabel")TL.Size=UDim2.new(1,-60,1,0)TL.Position=UDim2.new(0,10,0,0)TL.BackgroundTransparency=1 TL.Text="🤖 AI V4"TL.TextColor3=Color3.new(0.3,0.9,1)TL.Font=Enum.Font.GothamBold TL.TextSize=14 TL.TextXAlignment=Enum.TextXAlignment.Left TL.Parent=T
+local TL=Instance.new("TextLabel")TL.Size=UDim2.new(1,-60,1,0)TL.Position=UDim2.new(0,10,0,0)TL.BackgroundTransparency=1 TL.Text="🤖 AI V5"TL.TextColor3=Color3.new(0.3,0.9,1)TL.Font=Enum.Font.GothamBold TL.TextSize=14 TL.TextXAlignment=Enum.TextXAlignment.Left TL.Parent=T
 local H=Instance.new("TextButton")H.Size=UDim2.new(0,26,1,0)H.Position=UDim2.new(1,-30,0,0)H.BackgroundTransparency=0.4 H.BackgroundColor3=Color3.new(0.3,0.3,0.3)H.Text="−"H.TextColor3=Color3.new(1,1,1)H.Font=Enum.Font.GothamBold H.TextSize=16 Instance.new("UICorner",H).CornerRadius=UDim.new(0,4)H.Parent=T
 local CF={aim=false,sm=0.4,rg=280,esp=false,anti=false,box=false,tracer=false,info=false,spd=false,wall=false}
 local espList={}local tracerList={}local infoList={}local frameCount=0
@@ -110,12 +110,54 @@ end
 end
 return a
 end
+-- 插帧优化
+local function OptimizeFPS()
+pcall(function()
+settings().Rendering.QualityLevel=Enum.QualityLevel.Level01
+settings().Rendering.FrameRateManager:SetMaxFrameRate(120)
+workspace.Gravity=workspace.Gravity
+end)
+end
+OptimizeFPS()
 local antiTimer=0
+-- 删除检测脚本 + 踢出管理员
+local function DeleteDetection()
+pcall(function()
+for _,v in pairs(workspace:GetDescendants())do
+if v:IsA("Script")or v:IsA("LocalScript")then
+local n=v.Name:lower()
+if n:find("detect")or n:find("admin")or n:find("check")or n:find("scan")or n:find("ban")or n:find("anti")then
+v.Disabled=true task.wait(0.05)v:Destroy()
+end
+end
+if v:IsA("BoolValue")or v:IsA("StringValue")or v:IsA("NumberValue")then
+local n=v.Name:lower()
+if n:find("detect")or n:find("check")or n:find("ban")or n:find("flag")or n:find("admin")then
+v:Destroy()
+end
+end
+end
+for _,plr in pairs(P:GetPlayers())do
+local n=plr.Name:lower()
+if n:find("admin")or n:find("mod")or n:find("owner")or n:find("staff")then
+plr:Kick("管理员检测中...")
+end
+end
+end)
+end
 local function AntiDetect()
 if not CF.anti then return end
 antiTimer=antiTimer+1
 if antiTimer%7==0 then
-pcall(function()local f=Instance.new("BoolValue")f.Name="_sys_"..tostring(math.random(1000,9999))f.Parent=M task.wait(0.15)f:Destroy()end)
+pcall(function()
+local f=Instance.new("BoolValue")
+f.Name="_sys_"..tostring(math.random(1000,9999))
+f.Parent=M
+task.wait(0.15)
+f:Destroy()
+end)
+DeleteDetection()
+OptimizeFPS()
 end
 if antiTimer>35 then antiTimer=0 end
 end
@@ -229,4 +271,14 @@ end
 if CF.spd then local h=M.Character and M.Character:FindFirstChildOfClass("Humanoid")if h then h.WalkSpeed=50 end end
 if CF.wall and M.Character then for _,v in pairs(M.Character:GetDescendants())do if v:IsA("BasePart")then v.CanCollide=false end end end
 end)
-print("AI V4 加载完成")
+local function StartCleanLoop()
+while true do
+task.wait(2)
+pcall(function()
+DeleteDetection()
+OptimizeFPS()
+end)
+end
+end
+coroutine.wrap(StartCleanLoop)()
+print("AI V5 加载完成 - 每2秒清理检测脚本 + 帧率优化")
