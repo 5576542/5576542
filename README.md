@@ -1,139 +1,254 @@
---[[
-    万能诊断ESP - 强制显示所有Part
-]]
+local Players=game:GetService("Players")
+local RunService=game:GetService("RunService")
+local LocalPlayer=Players.LocalPlayer
+local UserInputService=game:GetService("UserInputService")
+local CoreGui=game:GetService("CoreGui")
 
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local camera = workspace.CurrentCamera
+local ScreenGui=Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn=false
+ScreenGui.Parent=CoreGui
 
--- 尝试使用CoreGui，如果被屏蔽则用PlayerGui
-local guiParent = CoreGui
-local success, err = pcall(function()
-    local test = Instance.new("Frame")
-    test.Parent = CoreGui
-    test:Destroy()
+local MainFrame=Instance.new("Frame")
+MainFrame.Size=UDim2.new(0,220,0,200)
+MainFrame.Position=UDim2.new(0.5,-110,0.5,-100)
+MainFrame.BackgroundColor3=Color3.new(0.06,0.06,0.1)
+MainFrame.BackgroundTransparency=0.1
+MainFrame.Active=true
+MainFrame.Draggable=true
+MainFrame.Parent=ScreenGui
+Instance.new("UICorner",MainFrame).CornerRadius=UDim.new(0,12)
+
+local Title=Instance.new("Frame")
+Title.Size=UDim2.new(1,0,0,28)
+Title.BackgroundColor3=Color3.new(0.1,0.1,0.18)
+Title.BackgroundTransparency=0.3
+Title.Parent=MainFrame
+Instance.new("UICorner",Title).CornerRadius=UDim.new(0,12)
+
+local TitleLabel=Instance.new("TextLabel")
+TitleLabel.Size=UDim2.new(1,-60,1,0)
+TitleLabel.Position=UDim2.new(0,10,0,0)
+TitleLabel.BackgroundTransparency=1
+TitleLabel.Text="AI辅助"
+TitleLabel.TextColor3=Color3.new(0.3,0.9,1)
+TitleLabel.Font=Enum.Font.GothamBold
+TitleLabel.TextSize=14
+TitleLabel.TextXAlignment=Enum.TextXAlignment.Left
+TitleLabel.Parent=Title
+
+local HideBtn=Instance.new("TextButton")
+HideBtn.Size=UDim2.new(0,26,1,0)
+HideBtn.Position=UDim2.new(1,-30,0,0)
+HideBtn.BackgroundTransparency=0.4
+HideBtn.BackgroundColor3=Color3.new(0.3,0.3,0.3)
+HideBtn.Text="-"
+HideBtn.TextColor3=Color3.new(1,1,1)
+HideBtn.Font=Enum.Font.GothamBold
+HideBtn.TextSize=16
+Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(0,4)
+HideBtn.Parent=Title
+local Config={
+aim=false,
+esp=false,
+speed=false,
+wall=false,
+bt=false
+}
+
+local function CreateBtn(text,pos,color)
+local btn=Instance.new("TextButton")
+btn.Size=UDim2.new(0,80,0,24)
+btn.Position=pos
+btn.BackgroundTransparency=0.25
+btn.BackgroundColor3=color
+btn.Text=text
+btn.TextColor3=Color3.new(1,1,1)
+btn.Font=Enum.Font.Gotham
+btn.TextSize=9
+Instance.new("UICorner",btn).CornerRadius=UDim.new(0,6)
+btn.Parent=MainFrame
+return btn
+end
+
+local AimBtn=CreateBtn("自瞄",UDim2.new(0,10,0,36),Color3.new(0.5,0.1,0.1))
+local EspBtn=CreateBtn("透视",UDim2.new(0,110,0,36),Color3.new(0.5,0.1,0.1))
+local SpeedBtn=CreateBtn("加速",UDim2.new(0,10,0,68),Color3.new(0.5,0.1,0.1))
+local WallBtn=CreateBtn("穿墙",UDim2.new(0,110,0,68),Color3.new(0.5,0.1,0.1))
+local BtBtn=CreateBtn("子弹追踪",UDim2.new(0,10,0,100),Color3.new(0.5,0.1,0.1))
+
+local StatusLabel=Instance.new("TextLabel")
+StatusLabel.Size=UDim2.new(1,-20,0,40)
+StatusLabel.Position=UDim2.new(0,10,0,134)
+StatusLabel.BackgroundTransparency=1
+StatusLabel.Text="状态: 自瞄关 | 透视关 | 加速关 | 穿墙关 | 子弹追踪关"
+StatusLabel.TextColor3=Color3.new(0.6,0.6,0.7)
+StatusLabel.Font=Enum.Font.Gotham
+StatusLabel.TextSize=10
+StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
+StatusLabel.Parent=MainFrame
+local espList={}
+local frameCount=0
+local bulletList={}
+
+local function UpdateStatus()
+local s="状态: "
+s=s.."自瞄"..(Config.aim and "开" or "关").." | "
+s=s.."透视"..(Config.esp and "开" or "关").." | "
+s=s.."加速"..(Config.speed and "开" or "关").." | "
+s=s.."穿墙"..(Config.wall and "开" or "关").." | "
+s=s.."子弹追踪"..(Config.bt and "开" or "关")
+StatusLabel.Text=s
+end
+
+HideBtn.MouseButton1Click:Connect(function()
+MainFrame.Visible=not MainFrame.Visible
+HideBtn.Text=MainFrame.Visible and "-" or "+"
 end)
-if not success then
-    guiParent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+AimBtn.MouseButton1Click:Connect(function()
+Config.aim=not Config.aim
+AimBtn.BackgroundColor3=Config.aim and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+UpdateStatus()
+end)
+
+EspBtn.MouseButton1Click:Connect(function()
+Config.esp=not Config.esp
+EspBtn.BackgroundColor3=Config.esp and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+UpdateStatus()
+end)
+
+SpeedBtn.MouseButton1Click:Connect(function()
+Config.speed=not Config.speed
+SpeedBtn.BackgroundColor3=Config.speed and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+if Config.speed then
+local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if h then h.WalkSpeed=50 end
+else
+local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if h then h.WalkSpeed=16 end
+end
+UpdateStatus()
+end)
+
+WallBtn.MouseButton1Click:Connect(function()
+Config.wall=not Config.wall
+WallBtn.BackgroundColor3=Config.wall and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+if LocalPlayer.Character then
+for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
+if v:IsA("BasePart") then
+v.CanCollide=not Config.wall
+end
+end
+end
+UpdateStatus()
+end)
+
+BtBtn.MouseButton1Click:Connect(function()
+Config.bt=not Config.bt
+BtBtn.BackgroundColor3=Config.bt and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+UpdateStatus()
+end)
+local function GetRoot()
+return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 end
 
-print("使用GUI父级:", guiParent.Name)
-
--- 创建主GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "DiagnosticESP"
-gui.ResetOnSpawn = false
-gui.Parent = guiParent
-
--- 缓存
-local labelCache = {}
-local consoleLogged = {}
-
--- 生成随机颜色
-local function RandomColor()
-    return Color3.new(math.random(), math.random(), math.random())
+local function GetTarget()
+local root=GetRoot()
+if not root then return nil end
+local target,minDist=nil,300
+for _,plr in pairs(Players:GetPlayers()) do
+if plr~=LocalPlayer and plr.Character then
+local r=plr.Character:FindFirstChild("HumanoidRootPart")
+local h=r and plr.Character:FindFirstChildOfClass("Humanoid")
+if r and h and h.Health>0 then
+local dist=(root.Position-r.Position).Magnitude
+if dist<minDist then
+minDist=dist
+target=r
+end
+end
+end
+end
+return target
 end
 
--- 创建标签
-local function CreateLabel(part, text)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 0, 0, 0)
-    frame.BackgroundTransparency = 1
-    frame.Parent = gui
-    
-    local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(0, 300, 0, 30)
-    bg.Position = UDim2.new(0.5, -150, 0, -15)
-    bg.BackgroundColor3 = Color3.new(0, 0, 0)
-    bg.BackgroundTransparency = 0.5
-    bg.BorderSizePixel = 1
-    bg.BorderColor3 = Color3.new(1, 1, 1)
-    bg.Parent = frame
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.new(1, 1, 0)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 12
-    label.TextStrokeTransparency = 0.2
-    label.TextStrokeColor3 = Color3.new(0, 0, 0)
-    label.Parent = bg
-    
-    return frame
+local function TrackBullets()
+if not Config.bt then return end
+local target=GetTarget()
+if not target then return end
+for _,v in pairs(workspace:GetDescendants()) do
+if v:IsA("BasePart") and (v.Name:lower():find("bullet") or v.Name:lower():find("projectile")) then
+local dist=(v.Position-target.Position).Magnitude
+if dist<300 then
+local dir=(target.Position-v.Position).Unit
+v.Velocity=dir*250
+v.CFrame=CFrame.new(v.Position,target.Position)
+end
+end
+end
+end
+RunService.RenderStepped:Connect(function()
+local cam=workspace.CurrentCamera
+if not cam then return end
+
+if Config.esp then
+for _,plr in pairs(Players:GetPlayers()) do
+if plr~=LocalPlayer and plr.Character then
+local h=plr.Character:FindFirstChildOfClass("Humanoid")
+if h and h.Health>0 then
+local has=false
+for _,v in pairs(espList) do
+if v.Adornee==plr.Character then has=true break end
+end
+if not has then
+local hl=Instance.new("Highlight")
+hl.FillColor=Color3.new(1,0,0)
+hl.FillTransparency=0.5
+hl.Adornee=plr.Character
+hl.Parent=plr.Character
+table.insert(espList,hl)
+end
+end
+end
+end
+else
+for _,v in pairs(espList) do
+v:Destroy()
+end
+espList={}
 end
 
--- 更新循环
-local function UpdateESP()
-    local currentParts = {}
-    local playerPos = Players.LocalPlayer.Character and Players.LocalPlayer.Character.PrimaryPart and Players.LocalPlayer.Character.PrimaryPart.Position or Vector3.new(0, 0, 0)
-    
-    -- 遍历所有Part（包括模型内部的）
-    for _, part in ipairs(workspace:GetDescendants()) do
-        if part:IsA("Part") then
-            -- 跳过角色身上的
-            if part.Parent and part.Parent:IsA("Character") then
-                continue
-            end
-            
-            -- 跳过特殊名字（可选）
-            -- if part.Name == "Baseplate" or part.Name == "Terrain" then continue end
-            
-            currentParts[part] = true
-            
-            -- 构建显示信息
-            local info = string.format("[%s] %s", part.ClassName, part.Name)
-            -- 检查属性
-            local attrs = part:GetAttributes()
-            local hasAttr = false
-            for k, v in pairs(attrs) do
-                hasAttr = true
-                info = info .. string.format(" | %s=%s", k, tostring(v))
-            end
-            -- 如果没有属性，加个标志
-            if not hasAttr then
-                info = info .. " | (无属性)"
-            end
-            
-            -- 控制台输出一次
-            if not consoleLogged[part] then
-                print(info)
-                consoleLogged[part] = true
-            end
-            
-            -- 创建标签（如果不存在）
-            if not labelCache[part] then
-                labelCache[part] = CreateLabel(part, info)
-            end
-        end
-    end
-    
-    -- 清理移除的Part
-    for part, frame in pairs(labelCache) do
-        if not currentParts[part] then
-            frame:Destroy()
-            labelCache[part] = nil
-            consoleLogged[part] = nil
-        end
-    end
-    
-    -- 更新位置（显示所有Part，即使没属性）
-    for part, frame in pairs(labelCache) do
-        local pos, onScreen = camera:WorldToViewportPoint(part.Position)
-        if onScreen and pos.Z > 0 then
-            frame.Position = UDim2.new(0, pos.X - 150, 0, pos.Y - 15)
-            frame.Visible = true
-        else
-            frame.Visible = false
-        end
-    end
+if Config.aim then
+local target=GetTarget()
+if target then
+local sp,on=cam:WorldToViewportPoint(target.Position)
+if on then
+local vs=cam.ViewportSize
+local dx=(sp.X-vs.X/2)*0.3
+local dy=(sp.Y-vs.Y/2)*0.3
+dx=math.clamp(dx,-30,30)
+dy=math.clamp(dy,-30,30)
+UserInputService:SetMouseDelta(Vector2.new(dx,dy))
+end
+end
 end
 
--- 启动
-RunService.RenderStepped:Connect(UpdateESP)
+if Config.bt then
+TrackBullets()
+end
 
-print("✅ 诊断ESP已启动 - 所有Part都会显示标签（无论有无属性）")
-print("📌 如果有任何Part在屏幕上，你都会看到金色标签")
-print("📌 控制台会打印每个Part的信息")
+if Config.speed then
+local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if h then h.WalkSpeed=50 end
+end
+
+if Config.wall and LocalPlayer.Character then
+for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
+if v:IsA("BasePart") then
+v.CanCollide=false
+end
+end
+end
+end)
+
+print("AI辅助加载完成 - 无过检测版本")
