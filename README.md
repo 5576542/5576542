@@ -1,299 +1,238 @@
-local P=game:GetService("Players")local R=game:GetService("RunService")local M=P.LocalPlayer
-local U=game:GetService("UserInputService")local C=game:GetService("CoreGui")
-local function ShowStartup()
-local notify=Instance.new("Frame")
-notify.Size=UDim2.new(0,220,0,60)
-notify.Position=UDim2.new(1,-240,1,-80)
-notify.BackgroundColor3=Color3.new(0.08,0.08,0.15)
-notify.BackgroundTransparency=0.1
-notify.Parent=C
-Instance.new("UICorner",notify).CornerRadius=UDim.new(0,12)
-local icon=Instance.new("Frame")icon.Size=UDim2.new(0,36,0,36)icon.Position=UDim2.new(0,8,0,12)icon.BackgroundColor3=Color3.new(0.2,0.6,1)icon.Parent=notify
-Instance.new("UICorner",icon).CornerRadius=UDim.new(1,0)
-local it=Instance.new("TextLabel")it.Size=UDim2.new(1,0,1,0)it.BackgroundTransparency=1 it.Text="AI"it.TextColor3=Color3.new(1,1,1)it.Font=Enum.Font.GothamBold it.TextSize=16 it.Parent=icon
-local title=Instance.new("TextLabel")title.Size=UDim2.new(1,-60,0,18)title.Position=UDim2.new(0,52,0,12)title.BackgroundTransparency=1 title.Text="AI 过检测正在加载中..."title.TextColor3=Color3.new(0.3,0.8,1)title.Font=Enum.Font.GothamBold title.TextSize=13 title.TextXAlignment=Enum.TextXAlignment.Left title.Parent=notify
-local sub=Instance.new("TextLabel")sub.Size=UDim2.new(1,-60,0,16)sub.Position=UDim2.new(0,52,0,32)sub.BackgroundTransparency=1 sub.Text="脚本正在加载中，请稍后..."sub.TextColor3=Color3.new(0.6,0.6,0.7)sub.Font=Enum.Font.Gotham sub.TextSize=10 sub.TextXAlignment=Enum.TextXAlignment.Left sub.Parent=notify
-local bar=Instance.new("Frame")bar.Size=UDim2.new(0,0,0,2)bar.Position=UDim2.new(0,0,0,58)bar.BackgroundColor3=Color3.new(0.2,0.6,1)bar.Parent=notify
-Instance.new("UICorner",bar).CornerRadius=UDim.new(0,1)
-for i=1,100 do bar.Size=UDim2.new(i/100,0,0,2)task.wait(0.02)end
-task.wait(0.3)notify:Destroy()
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- 创建主GUI容器
+local lootGui = Instance.new("ScreenGui")
+lootGui.Name = "LootESP"
+lootGui.ResetOnSpawn = false
+lootGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+lootGui.Parent = CoreGui
+
+-- 缓存
+local espCache = {}
+local labelPool = {}
+
+-- 创建单个ESP（红框+价值标签）
+local function CreateESP(part, value)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0, 0, 0, 0)
+    container.BackgroundTransparency = 1
+    container.Parent = lootGui
+    
+    -- 红框（四个边组成）
+    local function MakeBorder(parent, size, position)
+        local border = Instance.new("Frame")
+        border.Size = size
+        border.Position = position
+        border.BackgroundColor3 = Color3.new(1, 0, 0)
+        border.BackgroundTransparency = 0.3
+        border.BorderSizePixel = 0
+        border.Parent = parent
+        return border
+    end
+    
+    -- 上边
+    local top = MakeBorder(container, UDim2.new(1, 0, 0, 2), UDim2.new(0, 0, 0, 0))
+    -- 下边
+    local bottom = MakeBorder(container, UDim2.new(1, 0, 0, 2), UDim2.new(0, 0, 1, -2))
+    -- 左边
+    local left = MakeBorder(container, UDim2.new(0, 2, 1, 0), UDim2.new(0, 0, 0, 0))
+    -- 右边
+    local right = MakeBorder(container, UDim2.new(0, 2, 1, 0), UDim2.new(1, -2, 0, 0))
+    
+    -- 价值标签（在框上方）
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 100, 0, 20)
+    label.Position = UDim2.new(0.5, -50, 0, -25)
+    label.BackgroundTransparency = 1
+    label.Text = string.format("💰 %d", value)
+    label.TextColor3 = Color3.new(1, 0.92, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.Parent = container
+    
+    -- 背景光晕
+    local glow = Instance.new("Frame")
+    glow.Size = UDim2.new(1.2, 0, 1.2, 0)
+    glow.Position = UDim2.new(-0.1, 0, -0.1, 0)
+    glow.BackgroundColor3 = Color3.new(1, 0, 0)
+    glow.BackgroundTransparency = 0.85
+    glow.BorderSizePixel = 0
+    glow.Parent = container
+    
+    return container
 end
-coroutine.wrap(ShowStartup)()
-local G=Instance.new("ScreenGui")G.ResetOnSpawn=false G.Parent=C
-local F=Instance.new("Frame")F.Size=UDim2.new(0,280,0,260)F.Position=UDim2.new(0.5,-140,0.5,-130)F.BackgroundColor3=Color3.new(0.06,0.06,0.1)F.BackgroundTransparency=0.1 F.Active=true F.Draggable=true F.Parent=G
-Instance.new("UICorner",F).CornerRadius=UDim.new(0,12)
-local T=Instance.new("Frame")T.Size=UDim2.new(1,0,0,28)T.BackgroundColor3=Color3.new(0.1,0.1,0.18)T.BackgroundTransparency=0.3 T.Parent=F
-Instance.new("UICorner",T).CornerRadius=UDim.new(0,12)
-local TL=Instance.new("TextLabel")TL.Size=UDim2.new(1,-60,1,0)TL.Position=UDim2.new(0,10,0,0)TL.BackgroundTransparency=1 TL.Text="🤖 AI V4.5"TL.TextColor3=Color3.new(0.3,0.9,1)TL.Font=Enum.Font.GothamBold TL.TextSize=14 TL.TextXAlignment=Enum.TextXAlignment.Left TL.Parent=T
-local H=Instance.new("TextButton")H.Size=UDim2.new(0,26,1,0)H.Position=UDim2.new(1,-30,0,0)H.BackgroundTransparency=0.4 H.BackgroundColor3=Color3.new(0.3,0.3,0.3)H.Text="−"H.TextColor3=Color3.new(1,1,1)H.Font=Enum.Font.GothamBold H.TextSize=16 Instance.new("UICorner",H).CornerRadius=UDim.new(0,4)H.Parent=T
-local CF={aim=false,sm=0.4,rg=280,esp=false,anti=false,box=false,tracer=false,info=false,spd=false,wall=false,bt=false}
-local espList={}local tracerList={}local infoList={}local frameCount=0
-local currentPage=1
-local PrevBtn=Instance.new("TextButton")PrevBtn.Size=UDim2.new(0,40,0,22)PrevBtn.Position=UDim2.new(0,8,0,234)PrevBtn.BackgroundTransparency=0.25 PrevBtn.BackgroundColor3=Color3.new(0.1,0.3,0.5)PrevBtn.Text="◀"PrevBtn.TextColor3=Color3.new(1,1,1)PrevBtn.Font=Enum.Font.GothamBold PrevBtn.TextSize=14 Instance.new("UICorner",PrevBtn).CornerRadius=UDim.new(0,4)PrevBtn.Parent=F
-local NextBtn=Instance.new("TextButton")NextBtn.Size=UDim2.new(0,40,0,22)NextBtn.Position=UDim2.new(1,-48,0,234)NextBtn.BackgroundTransparency=0.25 NextBtn.BackgroundColor3=Color3.new(0.1,0.3,0.5)NextBtn.Text="▶"NextBtn.TextColor3=Color3.new(1,1,1)NextBtn.Font=Enum.Font.GothamBold NextBtn.TextSize=14 Instance.new("UICorner",NextBtn).CornerRadius=UDim.new(0,4)NextBtn.Parent=F
-local PageLabel=Instance.new("TextLabel")PageLabel.Size=UDim2.new(0,50,0,22)PageLabel.Position=UDim2.new(0.5,-25,0,234)PageLabel.BackgroundTransparency=1 PageLabel.Text="1/3"PageLabel.TextColor3=Color3.new(0.6,0.6,0.7)PageLabel.Font=Enum.Font.Gotham PageLabel.TextSize=11 PageLabel.Parent=F
-local P1=Instance.new("Frame")P1.Size=UDim2.new(1,0,1,-70)P1.Position=UDim2.new(0,0,0,32)P1.BackgroundTransparency=1 P1.Parent=F
-local P2=Instance.new("Frame")P2.Size=UDim2.new(1,0,1,-70)P2.Position=UDim2.new(0,0,0,32)P2.BackgroundTransparency=1 P2.Visible=false P2.Parent=F
-local P3=Instance.new("Frame")P3.Size=UDim2.new(1,0,1,-70)P3.Position=UDim2.new(0,0,0,32)P3.BackgroundTransparency=1 P3.Visible=false P3.Parent=F
-local function Bt(parent,p,t,c)
-local b=Instance.new("TextButton")
-b.Size=UDim2.new(0,75,0,24)
-b.Position=p
-b.BackgroundTransparency=0.25
-b.BackgroundColor3=c
-b.Text=t
-b.TextColor3=Color3.new(1,1,1)
-b.Font=Enum.Font.Gotham
-b.TextSize=9
-Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
-b.Parent=parent
-return b
+
+-- 获取对象池标签
+local function GetESP(part, value)
+    local esp = table.remove(labelPool)
+    if esp then
+        esp.Parent = lootGui
+        esp:FindFirstChild("TextLabel").Text = string.format("💰 %d", value)
+        return esp
+    end
+    return CreateESP(part, value)
 end
-local function Lb(parent,p,t)
-local l=Instance.new("TextLabel")
-l.Size=UDim2.new(0,100,0,20)
-l.Position=p
-l.BackgroundTransparency=1
-l.Text=t
-l.TextColor3=Color3.new(0.8,0.8,0.9)
-l.Font=Enum.Font.Gotham
-l.TextSize=10
-l.TextXAlignment=Enum.TextXAlignment.Left
-l.Parent=parent
-return l
+
+-- 回收ESP
+local function RecycleESP(esp)
+    esp.Parent = nil
+    table.insert(labelPool, esp)
 end
-local smLabel=Lb(P1,UDim2.new(0,5,0,34),"平滑度: "..CF.sm)
-local rgLabel=Lb(P1,UDim2.new(0,5,0,60),"距离: "..CF.rg)
-local AimBtn=Bt(P1,UDim2.new(0,5,0,5),"自瞄",Color3.new(0.5,0.1,0.1))
-local SmAdd=Bt(P1,UDim2.new(0,150,0,32),"+",Color3.new(0.1,0.3,0.5))
-local SmSub=Bt(P1,UDim2.new(0,80,0,32),"-",Color3.new(0.1,0.3,0.5))
-local RgAdd=Bt(P1,UDim2.new(0,150,0,58),"+",Color3.new(0.1,0.3,0.5))
-local RgSub=Bt(P1,UDim2.new(0,80,0,58),"-",Color3.new(0.1,0.3,0.5))
-local AntiBtn=Bt(P1,UDim2.new(0,80,0,84),"过检测",Color3.new(0.5,0.1,0.1))
-local BtBtn=Bt(P1,UDim2.new(0,5,0,84),"子弹追踪",Color3.new(0.5,0.1,0.1))
-local EspBtn=Bt(P2,UDim2.new(0,5,0,5),"透视",Color3.new(0.5,0.1,0.1))
-local BoxBtn=Bt(P2,UDim2.new(0,80,0,32),"方框",Color3.new(0.5,0.1,0.1))
-local TracerBtn=Bt(P2,UDim2.new(0,80,0,58),"射线",Color3.new(0.5,0.1,0.1))
-local InfoBtn=Bt(P2,UDim2.new(0,80,0,84),"信息",Color3.new(0.5,0.1,0.1))
-local SpdBtn=Bt(P3,UDim2.new(0,5,0,5),"加速",Color3.new(0.5,0.1,0.1))
-local WallBtn=Bt(P3,UDim2.new(0,80,0,5),"穿墙",Color3.new(0.5,0.1,0.1))
-Lb(P3,UDim2.new(0,5,0,34),"移速: 50")
-Lb(P3,UDim2.new(0,5,0,60),"穿墙: 开启后穿墙")
-local function UpdatePage()
-if currentPage==1 then P1.Visible=true P2.Visible=false P3.Visible=false PageLabel.Text="1/3"
-elseif currentPage==2 then P1.Visible=false P2.Visible=true P3.Visible=false PageLabel.Text="2/3"
-else P1.Visible=false P2.Visible=false P3.Visible=true PageLabel.Text="3/3" end
+
+-- 更新ESP位置和大小
+local function UpdateESP(esp, part)
+    if not part or not part.Parent then
+        return false
+    end
+    
+    -- 获取部件在屏幕上的位置和大小
+    local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+    
+    if not onScreen then
+        esp.Visible = false
+        return true
+    end
+    
+    -- 计算部件在屏幕上的大小（基于部件的实际大小）
+    local size = part.Size
+    local halfSize = size / 2
+    
+    -- 获取部件的8个顶点，计算屏幕边界
+    local corners = {
+        part.CFrame:PointToWorldSpace(-halfSize),
+        part.CFrame:PointToWorldSpace(halfSize),
+        part.CFrame:PointToWorldSpace(Vector3.new(-halfSize.X, halfSize.Y, halfSize.Z)),
+        part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X, -halfSize.Y, halfSize.Z)),
+        part.CFrame:PointToWorldSpace(Vector3.new(-halfSize.X, -halfSize.Y, -halfSize.Z)),
+        part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X, halfSize.Y, -halfSize.Z)),
+        part.CFrame:PointToWorldSpace(Vector3.new(-halfSize.X, halfSize.Y, -halfSize.Z)),
+        part.CFrame:PointToWorldSpace(Vector3.new(halfSize.X, -halfSize.Y, -halfSize.Z))
+    }
+    
+    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    
+    for _, corner in ipairs(corners) do
+        local pos, vis = camera:WorldToViewportPoint(corner)
+        if vis then
+            minX = math.min(minX, pos.X)
+            maxX = math.max(maxX, pos.X)
+            minY = math.min(minY, pos.Y)
+            maxY = math.max(maxY, pos.Y)
+        end
+    end
+    
+    -- 如果无法计算边界，使用默认大小
+    if minX == math.huge then
+        local pos, _ = camera:WorldToViewportPoint(part.Position)
+        minX = pos.X - 30
+        maxX = pos.X + 30
+        minY = pos.Y - 30
+        maxY = pos.Y + 30
+    end
+    
+    -- 应用边界（增加一些padding）
+    local padding = 5
+    minX = math.max(0, minX - padding)
+    maxX = math.min(camera.ViewportSize.X, maxX + padding)
+    minY = math.max(0, minY - padding)
+    maxY = math.min(camera.ViewportSize.Y, maxY + padding)
+    
+    -- 更新UI位置和大小
+    esp.Size = UDim2.new(0, maxX - minX, 0, maxY - minY)
+    esp.Position = UDim2.new(0, minX, 0, minY)
+    esp.Visible = true
+    
+    return true
 end
-PrevBtn.MouseButton1Click:Connect(function()if currentPage>1 then currentPage=currentPage-1 UpdatePage()end end)
-NextBtn.MouseButton1Click:Connect(function()if currentPage<3 then currentPage=currentPage+1 UpdatePage()end end)
-local Ball=Instance.new("ImageButton")Ball.Size=UDim2.new(0,44,0,44)Ball.Position=UDim2.new(0.9,-22,0.8,-22)Ball.BackgroundColor3=Color3.new(0.2,0.6,1)Ball.Visible=false Ball.Draggable=true Ball.AutoButtonColor=false Ball.Parent=G
-Instance.new("UICorner",Ball).CornerRadius=UDim.new(1,0)
-local BallT=Instance.new("TextLabel")BallT.Size=UDim2.new(1,0,1,0)BallT.BackgroundTransparency=1 BallT.Text="AI"BallT.TextColor3=Color3.new(1,1,1)BallT.Font=Enum.Font.GothamBold BallT.TextSize=16 BallT.Parent=Ball
-local DS,DP
-Ball.InputBegan:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 then DS=i.Position DP=Ball.Position end end)
-Ball.InputChanged:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 and DS then local d=i.Position-DS Ball.Position=UDim2.new(DP.X.Scale,DP.X.Offset+d.X,DP.Y.Scale,DP.Y.Offset+d.Y)end end)
-Ball.InputEnded:Connect(function()DS=nil end)
-H.MouseButton1Click:Connect(function()F.Visible=false Ball.Visible=true Ball.Position=F.Position end)
-Ball.MouseButton1Click:Connect(function()F.Position=Ball.Position F.Visible=true Ball.Visible=false end)
--- 准星
-local Crosshair=Instance.new("ImageLabel")Crosshair.Size=UDim2.new(0,20,0,20)Crosshair.Position=UDim2.new(0.5,-10,0.5,-10)Crosshair.BackgroundTransparency=1 Crosshair.Image="rbxassetid://4988674020"Crosshair.Visible=false Crosshair.Parent=G
--- 红圈
-local Circle=Instance.new("Frame")Circle.Size=UDim2.new(0,150,0,150)Circle.Position=UDim2.new(0.5,-75,0.5,-75)Circle.BackgroundTransparency=1 Circle.Visible=false Circle.Parent=G
-local CircleBorder=Instance.new("Frame")CircleBorder.Size=UDim2.new(1,0,1,0)CircleBorder.BackgroundTransparency=0.5 CircleBorder.BackgroundColor3=Color3.new(1,0,0)CircleBorder.Parent=Circle
-Instance.new("UICorner",CircleBorder).CornerRadius=UDim.new(1,0)
-local CircleRing=Instance.new("Frame")CircleRing.Size=UDim2.new(0.8,0,0.8,0)CircleRing.Position=UDim2.new(0.1,0,0.1,0)CircleRing.BackgroundTransparency=0.3 CircleRing.BackgroundColor3=Color3.new(1,0,0)CircleRing.Parent=Circle
-Instance.new("UICorner",CircleRing).CornerRadius=UDim.new(1,0)
-local function GetRoot()return M.Character and M.Character:FindFirstChild("HumanoidRootPart")end
-local function GetTarget()
-local q=GetRoot()if not q then return end
-local a,b=nil,CF.rg
-for _,p in pairs(P:GetPlayers())do
-if p~=M and p.Character then
-local d=p.Character:FindFirstChild("HumanoidRootPart")
-local h=d and p.Character:FindFirstChildOfClass("Humanoid")
-if d and h and h.Health>0 then
-local f=(q.Position-d.Position).Magnitude
-if f<b then b=f a=d end
+
+-- 清理所有ESP
+local function ClearESP()
+    for part, data in pairs(espCache) do
+        RecycleESP(data.esp)
+        espCache[part] = nil
+    end
 end
+
+-- 主更新循环
+local function UpdateESPList()
+    local currentParts = {}
+    
+    -- 遍历所有工具
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Tool") then
+            local val = obj:GetAttribute("ItemValue")
+            if type(val) == "number" and val > 0 then
+                local handle = obj:FindFirstChildOfClass("Part")
+                if handle and handle.Parent then
+                    currentParts[handle] = true
+                    
+                    if not espCache[handle] then
+                        -- 新增
+                        local esp = GetESP(handle, val)
+                        espCache[handle] = {
+                            esp = esp,
+                            value = val
+                        }
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 移除不存在的
+    for part, data in pairs(espCache) do
+        if not currentParts[part] then
+            RecycleESP(data.esp)
+            espCache[part] = nil
+        end
+    end
+    
+    -- 更新所有ESP位置
+    for part, data in pairs(espCache) do
+        UpdateESP(data.esp, part)
+    end
 end
-end
-return a
-end
-local function OptimizeFPS()
-pcall(function()
-settings().Rendering.QualityLevel=Enum.QualityLevel.Level01
-settings().Rendering.FrameRateManager:SetMaxFrameRate(120)
+
+-- 监听新物品
+workspace.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") then
+        task.wait(0.1) -- 等待部件加载
+        local val = child:GetAttribute("ItemValue")
+        if type(val) == "number" and val > 0 then
+            local handle = child:FindFirstChildOfClass("Part")
+            if handle and not espCache[handle] then
+                local esp = GetESP(handle, val)
+                espCache[handle] = {
+                    esp = esp,
+                    value = val
+                }
+            end
+        end
+    end
 end)
-end
-OptimizeFPS()
-local antiTimer=0
-local function DeleteDetection()
-pcall(function()
-for _,v in pairs(workspace:GetDescendants())do
-if v:IsA("Script")or v:IsA("LocalScript")then
-local n=v.Name:lower()
-if n:find("detect")or n:find("admin")or n:find("check")or n:find("scan")or n:find("ban")then
-v.Disabled=true task.wait(0.05)v:Destroy()
-end
-end
-end
+
+-- 物品移除时清理
+workspace.ChildRemoved:Connect(function(child)
+    if child:IsA("Tool") then
+        local handle = child:FindFirstChildOfClass("Part")
+        if handle and espCache[handle] then
+            RecycleESP(espCache[handle].esp)
+            espCache[handle] = nil
+        end
+    end
 end)
-end
-local function AntiDetect()
-if not CF.anti then return end
-antiTimer=antiTimer+1
-if antiTimer%7==0 then
-pcall(function()
-local f=Instance.new("BoolValue")f.Name="_sys_"..tostring(math.random(1000,9999))f.Parent=M task.wait(0.15)f:Destroy()
+
+-- 每帧更新（红框需要实时跟随）
+RunService.RenderStepped:Connect(function()
+    UpdateESPList()
 end)
-DeleteDetection()
-OptimizeFPS()
-end
-if antiTimer>35 then antiTimer=0 end
-end
-AimBtn.MouseButton1Click:Connect(function()CF.aim=not CF.aim AimBtn.BackgroundColor3=CF.aim and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-SmAdd.MouseButton1Click:Connect(function()CF.sm=math.min(1,CF.sm+0.05)smLabel:Destroy()smLabel=Lb(P1,UDim2.new(0,5,0,34),"平滑度: "..string.format("%.2f",CF.sm))end)
-SmSub.MouseButton1Click:Connect(function()CF.sm=math.max(0.05,CF.sm-0.05)smLabel:Destroy()smLabel=Lb(P1,UDim2.new(0,5,0,34),"平滑度: "..string.format("%.2f",CF.sm))end)
-RgAdd.MouseButton1Click:Connect(function()CF.rg=math.min(600,CF.rg+10)rgLabel:Destroy()rgLabel=Lb(P1,UDim2.new(0,5,0,60),"距离: "..CF.rg)end)
-RgSub.MouseButton1Click:Connect(function()CF.rg=math.max(30,CF.rg-10)rgLabel:Destroy()rgLabel=Lb(P1,UDim2.new(0,5,0,60),"距离: "..CF.rg)end)
-AntiBtn.MouseButton1Click:Connect(function()CF.anti=not CF.anti AntiBtn.BackgroundColor3=CF.anti and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-BtBtn.MouseButton1Click:Connect(function()
-CF.bt=not CF.bt
-BtBtn.BackgroundColor3=CF.bt and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)
-Crosshair.Visible=CF.bt
-Circle.Visible=CF.bt
-end)
-EspBtn.MouseButton1Click:Connect(function()CF.esp=not CF.esp EspBtn.BackgroundColor3=CF.esp and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-BoxBtn.MouseButton1Click:Connect(function()CF.box=not CF.box BoxBtn.BackgroundColor3=CF.box and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-TracerBtn.MouseButton1Click:Connect(function()CF.tracer=not CF.tracer TracerBtn.BackgroundColor3=CF.tracer and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-InfoBtn.MouseButton1Click:Connect(function()CF.info=not CF.info InfoBtn.BackgroundColor3=CF.info and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)end)
-SpdBtn.MouseButton1Click:Connect(function()
-CF.spd=not CF.spd
-SpdBtn.BackgroundColor3=CF.spd and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)
-local h=M.Character and M.Character:FindFirstChildOfClass("Humanoid")
-if h then h.WalkSpeed=CF.spd and 50 or 16 end
-end)
-WallBtn.MouseButton1Click:Connect(function()
-CF.wall=not CF.wall
-WallBtn.BackgroundColor3=CF.wall and Color3.new(0.1,0.5,0.1)or Color3.new(0.5,0.1,0.1)
-if M.Character then
-for _,v in pairs(M.Character:GetDescendants())do
-if v:IsA("BasePart")then v.CanCollide=not CF.wall end
-end
-end
-end)
-local function TrackBullet()
-if not CF.bt then return end
-local target=GetTarget()
-if not target then return end
-for _,v in pairs(workspace:GetDescendants())do
-if v:IsA("BasePart")and(v.Name:lower():find("bullet")or v.Name:lower():find("projectile"))then
-local dist=(v.Position-target.Position).Magnitude
-if dist<CF.rg then
-local dir=(target.Position-v.Position).Unit
-v.Velocity=dir*250
-v.CFrame=CFrame.new(v.Position,target.Position)
-end
-end
-end
-end
-R.RenderStepped:Connect(function()
-AntiDetect()
-local cam=workspace.CurrentCamera if not cam then return end
-if CF.bt then
-TrackBullet()
-local target=GetTarget()
-if target then
-local sp,on=cam:WorldToViewportPoint(target.Position)
-if on then
-Circle.Position=UDim2.new(sp.X/ cam.ViewportSize.X-0.075,0,sp.Y/ cam.ViewportSize.Y-0.075,0)
-end
-end
-end
-if CF.aim then
-frameCount=frameCount+1
-if frameCount%math.random(1,2)==0 then
-local target=GetTarget()
-if target then
-local sp,on=cam:WorldToViewportPoint(target.Position)
-if on then
-local vs=cam.ViewportSize
-local dx=(sp.X-vs.X/2)*CF.sm+math.random(-3,3)
-local dy=(sp.Y-vs.Y/2)*CF.sm+math.random(-3,3)
-dx=math.clamp(dx,-60,60)dy=math.clamp(dy,-60,60)
-U:SetMouseDelta(Vector2.new(dx,dy))
-end
-end
-end
-end
-if CF.esp then
-for _,p in pairs(P:GetPlayers())do
-if p~=M and p.Character then
-local h=p.Character:FindFirstChildOfClass("Humanoid")
-if h and h.Health>0 then
-local root=p.Character:FindFirstChild("HumanoidRootPart")
-if CF.box then
-local has=false
-for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-if not has then
-local hl=Instance.new("Highlight")
-hl.FillColor=Color3.new(1,0.2,0.2)
-hl.FillTransparency=0.4
-hl.OutlineColor=Color3.new(1,0,0)
-hl.OutlineTransparency=0
-hl.Adornee=p.Character
-hl.Parent=p.Character
-table.insert(espList,hl)
-end
-end
-if CF.tracer and root then
-local myRoot=GetRoot()
-if myRoot then
-local line=Instance.new("LineHandleAdornment")
-line.Size=1
-line.Thickness=0.2
-line.Color3=Color3.new(0,1,0)
-line.Transparency=0.5
-line.Adornee=M.Character
-line.Parent=M.Character
-table.insert(tracerList,line)
-end
-end
-if CF.info and root then
-local myRoot=GetRoot()
-if myRoot then
-local dist=(myRoot.Position-root.Position).Magnitude
-local bg=Instance.new("BillboardGui")
-bg.Size=UDim2.new(0,80,0,16)
-bg.Adornee=p.Character
-bg.AlwaysOnTop=true
-bg.Parent=p.Character
-local tl=Instance.new("TextLabel")
-tl.Size=UDim2.new(1,0,1,0)
-tl.BackgroundTransparency=1
-tl.Text=p.Name.." ["..tostring(math.floor(dist)).."m]"
-tl.TextColor3=Color3.new(0,1,1)
-tl.Font=Enum.Font.GothamBold
-tl.TextSize=9
-tl.TextStrokeTransparency=0.3
-tl.TextStrokeColor3=Color3.new(0,0,0)
-tl.Parent=bg
-table.insert(infoList,bg)
-end
-end
-end
-end
-end
-else
-for _,v in pairs(espList)do v:Destroy()end espList={}
-for _,v in pairs(tracerList)do v:Destroy()end tracerList={}
-for _,v in pairs(infoList)do v:Destroy()end infoList={}
-end
-if CF.spd then local h=M.Character and M.Character:FindFirstChildOfClass("Humanoid")if h then h.WalkSpeed=50 end end
-if CF.wall and M.Character then for _,v in pairs(M.Character:GetDescendants())do if v:IsA("BasePart")then v.CanCollide=false end end end
-end)
-local function StartCleanLoop()
-while true do task.wait(2)pcall(function()DeleteDetection()OptimizeFPS()end)end
-end
-coroutine.wrap(StartCleanLoop)()
-print("AI V4.5 加载完成 - 子弹追踪+红圈+准星")
+
+-- 窗口大小变化时重新计算
+camera:GetPropertyChangedSignal("ViewportSize"):Co
