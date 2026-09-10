@@ -1,254 +1,294 @@
 local Players=game:GetService("Players")
-local RunService=game:GetService("RunService")
-local LocalPlayer=Players.LocalPlayer
-local UserInputService=game:GetService("UserInputService")
+local LP=Players.LocalPlayer
 local CoreGui=game:GetService("CoreGui")
+local UIS=game:GetService("UserInputService")
 
-local ScreenGui=Instance.new("ScreenGui")
-ScreenGui.ResetOnSpawn=false
-ScreenGui.Parent=CoreGui
+local G=Instance.new("ScreenGui")
+G.ResetOnSpawn=false
+G.Parent=CoreGui
 
+-- 底部提示框
+local TipFrame=Instance.new("Frame")
+TipFrame.Size=UDim2.new(0,420,0,35)
+TipFrame.Position=UDim2.new(0.5,-210,1,-55)
+TipFrame.BackgroundColor3=Color3.new(0.15,0.15,0.25)
+TipFrame.BackgroundTransparency=0.1
+TipFrame.Parent=G
+Instance.new("UICorner",TipFrame).CornerRadius=UDim.new(0,8)
+local TipGrad=Instance.new("UIGradient")
+TipGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.new(0.3,0.1,0.6)),ColorSequenceKeypoint.new(1,Color3.new(0.1,0.2,0.6))}
+TipGrad.Parent=TipFrame
+local TipLabel=Instance.new("TextLabel")
+TipLabel.Size=UDim2.new(1,-20,1,0)
+TipLabel.Position=UDim2.new(0,10,0,0)
+TipLabel.BackgroundTransparency=1
+TipLabel.Text="如果能摸摸我的头的话，我会很开心的！"
+TipLabel.TextColor3=Color3.new(0.9,0.9,1)
+TipLabel.Font=Enum.Font.Gotham
+TipLabel.TextSize=13
+TipLabel.Parent=TipFrame
+
+-- 主验证窗口
 local MainFrame=Instance.new("Frame")
-MainFrame.Size=UDim2.new(0,220,0,200)
-MainFrame.Position=UDim2.new(0.5,-110,0.5,-100)
-MainFrame.BackgroundColor3=Color3.new(0.06,0.06,0.1)
-MainFrame.BackgroundTransparency=0.1
+MainFrame.Size=UDim2.new(0,320,0,420)
+MainFrame.Position=UDim2.new(0.5,-160,0.5,-210)
+MainFrame.BackgroundColor3=Color3.new(0.08,0.08,0.15)
+MainFrame.BackgroundTransparency=0.05
 MainFrame.Active=true
 MainFrame.Draggable=true
-MainFrame.Parent=ScreenGui
-Instance.new("UICorner",MainFrame).CornerRadius=UDim.new(0,12)
+MainFrame.Parent=G
+Instance.new("UICorner",MainFrame).CornerRadius=UDim.new(0,16)
 
-local Title=Instance.new("Frame")
-Title.Size=UDim2.new(1,0,0,28)
-Title.BackgroundColor3=Color3.new(0.1,0.1,0.18)
-Title.BackgroundTransparency=0.3
-Title.Parent=MainFrame
-Instance.new("UICorner",Title).CornerRadius=UDim.new(0,12)
-
-local TitleLabel=Instance.new("TextLabel")
-TitleLabel.Size=UDim2.new(1,-60,1,0)
-TitleLabel.Position=UDim2.new(0,10,0,0)
-TitleLabel.BackgroundTransparency=1
-TitleLabel.Text="AI辅助"
-TitleLabel.TextColor3=Color3.new(0.3,0.9,1)
-TitleLabel.Font=Enum.Font.GothamBold
-TitleLabel.TextSize=14
-TitleLabel.TextXAlignment=Enum.TextXAlignment.Left
-TitleLabel.Parent=Title
-
-local HideBtn=Instance.new("TextButton")
-HideBtn.Size=UDim2.new(0,26,1,0)
-HideBtn.Position=UDim2.new(1,-30,0,0)
-HideBtn.BackgroundTransparency=0.4
-HideBtn.BackgroundColor3=Color3.new(0.3,0.3,0.3)
-HideBtn.Text="-"
-HideBtn.TextColor3=Color3.new(1,1,1)
-HideBtn.Font=Enum.Font.GothamBold
-HideBtn.TextSize=16
-Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(0,4)
-HideBtn.Parent=Title
-local Config={
-aim=false,
-esp=false,
-speed=false,
-wall=false,
-bt=false
+local MainGrad=Instance.new("UIGradient")
+MainGrad.Color=ColorSequence.new{
+ColorSequenceKeypoint.new(0,Color3.new(0.3,0.1,0.7)),
+ColorSequenceKeypoint.new(0.5,Color3.new(0.1,0.3,0.8)),
+ColorSequenceKeypoint.new(1,Color3.new(0.3,0.1,0.7))
 }
+MainGrad.Rotation=45
+MainGrad.Parent=MainFrame
 
-local function CreateBtn(text,pos,color)
-local btn=Instance.new("TextButton")
-btn.Size=UDim2.new(0,80,0,24)
-btn.Position=pos
-btn.BackgroundTransparency=0.25
-btn.BackgroundColor3=color
-btn.Text=text
-btn.TextColor3=Color3.new(1,1,1)
-btn.Font=Enum.Font.Gotham
-btn.TextSize=9
-Instance.new("UICorner",btn).CornerRadius=UDim.new(0,6)
-btn.Parent=MainFrame
-return btn
+local Border=Instance.new("UIStroke")
+Border.Color=Color3.new(0.5,0.2,1)
+Border.Thickness=2
+Border.Parent=MainFrame
+
+-- 标题
+local Title=Instance.new("TextLabel")
+Title.Size=UDim2.new(1,0,0,50)
+Title.Position=UDim2.new(0,0,0,15)
+Title.BackgroundTransparency=1
+Title.Text="AlienX Script"
+Title.TextColor3=Color3.new(0.8,0.4,1)
+Title.Font=Enum.Font.GothamBold
+Title.TextSize=28
+Title.Parent=MainFrame
+
+-- 图标（外星人头用文本替代，可自行换成图片ID）
+local Icon=Instance.new("ImageLabel")
+Icon.Size=UDim2.new(0,60,0,60)
+Icon.Position=UDim2.new(0.5,-30,0,70)
+Icon.BackgroundTransparency=1
+Icon.Image="rbxassetid://12788874504" -- 通用外星人图标
+Icon.Parent=MainFrame
+
+local SubTitle=Instance.new("TextLabel")
+SubTitle.Size=UDim2.new(1,0,0,20)
+SubTitle.Position=UDim2.new(0,0,0,135)
+SubTitle.BackgroundTransparency=1
+SubTitle.Text="卡密验证系统"
+SubTitle.TextColor3=Color3.new(0.9,0.9,1)
+SubTitle.Font=Enum.Font.GothamBold
+SubTitle.TextSize=14
+SubTitle.Parent=MainFrame
+
+local Hint=Instance.new("TextLabel")
+Hint.Size=UDim2.new(1,0,0,15)
+Hint.Position=UDim2.new(0,0,0,155)
+Hint.BackgroundTransparency=1
+Hint.Text="请输入您的卡密"
+Hint.TextColor3=Color3.new(0.6,0.6,0.8)
+Hint.Font=Enum.Font.Gotham
+Hint.TextSize=11
+Hint.Parent=MainFrame
+
+-- 卡密输入框
+local KeyBox=Instance.new("TextBox")
+KeyBox.Size=UDim2.new(0,280,0,40)
+KeyBox.Position=UDim2.new(0.5,-140,0,180)
+KeyBox.BackgroundColor3=Color3.new(0.15,0.15,0.25)
+KeyBox.TextColor3=Color3.new(1,1,1)
+KeyBox.Font=Enum.Font.Gotham
+KeyBox.TextSize=13
+KeyBox.PlaceholderText="XXXX-XXXX-XXXX-XXXX"
+KeyBox.PlaceholderColor3=Color3.new(0.4,0.4,0.6)
+KeyBox.Parent=MainFrame
+Instance.new("UICorner",KeyBox).CornerRadius=UDim.new(0,8)
+
+-- 版本切换（下拉菜单）
+local VersionBtn=Instance.new("TextButton")
+VersionBtn.Size=UDim2.new(0,280,0,40)
+VersionBtn.Position=UDim2.new(0.5,-140,0,235)
+VersionBtn.BackgroundColor3=Color3.new(0.15,0.15,0.25)
+VersionBtn.Text="版本: 通用版 ▼"
+VersionBtn.TextColor3=Color3.new(1,1,1)
+VersionBtn.Font=Enum.Font.Gotham
+VersionBtn.TextSize=13
+VersionBtn.Parent=MainFrame
+Instance.new("UICorner",VersionBtn).CornerRadius=UDim.new(0,8)
+
+local isWar=false
+VersionBtn.MouseButton1Click:Connect(function()
+isWar=not isWar
+VersionBtn.Text=isWar and "版本: 战争大亨 ▼" or "版本: 通用版 ▼"
+end)
+
+-- 验证按钮
+local KeyBtn=Instance.new("TextButton")
+KeyBtn.Size=UDim2.new(0,280,0,45)
+KeyBtn.Position=UDim2.new(0.5,-140,0,290)
+KeyBtn.BackgroundColor3=Color3.new(0.4,0.2,0.8)
+KeyBtn.Text="卡密"
+KeyBtn.TextColor3=Color3.new(1,1,1)
+KeyBtn.Font=Enum.Font.GothamBold
+KeyBtn.TextSize=16
+KeyBtn.Parent=MainFrame
+Instance.new("UICorner",KeyBtn).CornerRadius=UDim.new(0,8)
+
+local BtnGrad=Instance.new("UIGradient")
+BtnGrad.Color=ColorSequence.new{
+ColorSequenceKeypoint.new(0,Color3.new(0.4,0.1,0.9)),
+ColorSequenceKeypoint.new(1,Color3.new(0.1,0.3,0.9))
+}
+BtnGrad.Rotation=90
+BtnGrad.Parent=KeyBtn
+
+-- 底部水印
+local Watermark=Instance.new("TextLabel")
+Watermark.Size=UDim2.new(1,0,0,20)
+Watermark.Position=UDim2.new(0,0,1,-25)
+Watermark.BackgroundTransparency=1
+Watermark.Text="AlienX Script Key System"
+Watermark.TextColor3=Color3.new(0.3,0.3,0.5)
+Watermark.Font=Enum.Font.Gotham
+Watermark.TextSize=10
+Watermark.Parent=MainFrame
+-- 功能悬浮窗（验证成功后显示）
+local FunctionFrame=Instance.new("Frame")
+FunctionFrame.Size=UDim2.new(0,260,0,220)
+FunctionFrame.Position=UDim2.new(0.5,-130,0.5,-110)
+FunctionFrame.BackgroundColor3=Color3.new(0.08,0.08,0.15)
+FunctionFrame.BackgroundTransparency=0.05
+FunctionFrame.Active=true
+FunctionFrame.Draggable=true
+FunctionFrame.Visible=false
+FunctionFrame.Parent=G
+Instance.new("UICorner",FunctionFrame).CornerRadius=UDim.new(0,12)
+
+local FuncTitle=Instance.new("Frame")
+FuncTitle.Size=UDim2.new(1,0,0,28)
+FuncTitle.BackgroundColor3=Color3.new(0.15,0.15,0.25)
+FuncTitle.Parent=FunctionFrame
+Instance.new("UICorner",FuncTitle).CornerRadius=UDim.new(0,12)
+
+local FuncLabel=Instance.new("TextLabel")
+FuncLabel.Size=UDim2.new(1,-60,1,0)
+FuncLabel.Position=UDim2.new(0,10,0,0)
+FuncLabel.BackgroundTransparency=1
+FuncLabel.Text="AlienX 功能面板"
+FuncLabel.TextColor3=Color3.new(0.8,0.4,1)
+FuncLabel.Font=Enum.Font.GothamBold
+FuncLabel.TextSize=13
+FuncLabel.Parent=FuncTitle
+
+local HideF=Instance.new("TextButton")
+HideF.Size=UDim2.new(0,26,1,0)
+HideF.Position=UDim2.new(1,-30,0,0)
+HideF.BackgroundTransparency=0.4
+HideF.BackgroundColor3=Color3.new(0.3,0.3,0.3)
+HideF.Text="-"
+HideF.TextColor3=Color3.new(1,1,1)
+HideF.Font=Enum.Font.GothamBold
+HideF.TextSize=16
+Instance.new("UICorner",HideF).CornerRadius=UDim.new(0,4)
+HideF.Parent=FuncTitle
+
+-- 临时配置和功能按钮（你可以按需填入之前的功能）
+local CF={aim=false, esp=false, spd=false, wall=false, bt=false}
+local function Btn(t,p)
+local b=Instance.new("TextButton")
+b.Size=UDim2.new(0,75,0,24)
+b.Position=p
+b.BackgroundTransparency=0.25
+b.BackgroundColor3=Color3.new(0.5,0.1,0.1)
+b.Text=t
+b.TextColor3=Color3.new(1,1,1)
+b.Font=Enum.Font.Gotham
+b.TextSize=9
+Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
+b.Parent=FunctionFrame
+return b
 end
 
-local AimBtn=CreateBtn("自瞄",UDim2.new(0,10,0,36),Color3.new(0.5,0.1,0.1))
-local EspBtn=CreateBtn("透视",UDim2.new(0,110,0,36),Color3.new(0.5,0.1,0.1))
-local SpeedBtn=CreateBtn("加速",UDim2.new(0,10,0,68),Color3.new(0.5,0.1,0.1))
-local WallBtn=CreateBtn("穿墙",UDim2.new(0,110,0,68),Color3.new(0.5,0.1,0.1))
-local BtBtn=CreateBtn("子弹追踪",UDim2.new(0,10,0,100),Color3.new(0.5,0.1,0.1))
+local B1=Btn("自瞄",UDim2.new(0,8,0,36))
+local B2=Btn("透视",UDim2.new(0,100,0,36))
+local B3=Btn("加速",UDim2.new(0,8,0,66))
+local B4=Btn("穿墙",UDim2.new(0,100,0,66))
+local B5=Btn("子弹追踪",UDim2.new(0,8,0,96))
 
-local StatusLabel=Instance.new("TextLabel")
-StatusLabel.Size=UDim2.new(1,-20,0,40)
-StatusLabel.Position=UDim2.new(0,10,0,134)
-StatusLabel.BackgroundTransparency=1
-StatusLabel.Text="状态: 自瞄关 | 透视关 | 加速关 | 穿墙关 | 子弹追踪关"
-StatusLabel.TextColor3=Color3.new(0.6,0.6,0.7)
-StatusLabel.Font=Enum.Font.Gotham
-StatusLabel.TextSize=10
-StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
-StatusLabel.Parent=MainFrame
-local espList={}
-local frameCount=0
-local bulletList={}
+local SFunc=Instance.new("TextLabel")
+SFunc.Size=UDim2.new(1,-16,0,30)
+SFunc.Position=UDim2.new(0,8,0,130)
+SFunc.BackgroundTransparency=1
+SFunc.Text="状态: 等待开启"
+SFunc.TextColor3=Color3.new(0.6,0.6,0.7)
+SFunc.Font=Enum.Font.Gotham
+SFunc.TextSize=9
+SFunc.TextXAlignment=Enum.TextXAlignment.Left
+SFunc.Parent=FunctionFrame
 
-local function UpdateStatus()
-local s="状态: "
-s=s.."自瞄"..(Config.aim and "开" or "关").." | "
-s=s.."透视"..(Config.esp and "开" or "关").." | "
-s=s.."加速"..(Config.speed and "开" or "关").." | "
-s=s.."穿墙"..(Config.wall and "开" or "关").." | "
-s=s.."子弹追踪"..(Config.bt and "开" or "关")
-StatusLabel.Text=s
-end
+-- 验证逻辑
+KeyBtn.MouseButton1Click:Connect(function()
+local inputKey=KeyBox.Text
+local isValid=false
 
-HideBtn.MouseButton1Click:Connect(function()
-MainFrame.Visible=not MainFrame.Visible
-HideBtn.Text=MainFrame.Visible and "-" or "+"
-end)
-
-AimBtn.MouseButton1Click:Connect(function()
-Config.aim=not Config.aim
-AimBtn.BackgroundColor3=Config.aim and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
-UpdateStatus()
-end)
-
-EspBtn.MouseButton1Click:Connect(function()
-Config.esp=not Config.esp
-EspBtn.BackgroundColor3=Config.esp and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
-UpdateStatus()
-end)
-
-SpeedBtn.MouseButton1Click:Connect(function()
-Config.speed=not Config.speed
-SpeedBtn.BackgroundColor3=Config.speed and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
-if Config.speed then
-local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-if h then h.WalkSpeed=50 end
+if isWar then
+-- 战争大亨专属卡密
+if inputKey=="XDD-AX39F-F64XL-8MKHX-62S75" then
+isValid=true
 else
-local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-if h then h.WalkSpeed=16 end
-end
-UpdateStatus()
-end)
-
-WallBtn.MouseButton1Click:Connect(function()
-Config.wall=not Config.wall
-WallBtn.BackgroundColor3=Config.wall and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
-if LocalPlayer.Character then
-for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
-if v:IsA("BasePart") then
-v.CanCollide=not Config.wall
-end
-end
-end
-UpdateStatus()
-end)
-
-BtBtn.MouseButton1Click:Connect(function()
-Config.bt=not Config.bt
-BtBtn.BackgroundColor3=Config.bt and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
-UpdateStatus()
-end)
-local function GetRoot()
-return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-end
-
-local function GetTarget()
-local root=GetRoot()
-if not root then return nil end
-local target,minDist=nil,300
-for _,plr in pairs(Players:GetPlayers()) do
-if plr~=LocalPlayer and plr.Character then
-local r=plr.Character:FindFirstChild("HumanoidRootPart")
-local h=r and plr.Character:FindFirstChildOfClass("Humanoid")
-if r and h and h.Health>0 then
-local dist=(root.Position-r.Position).Magnitude
-if dist<minDist then
-minDist=dist
-target=r
-end
-end
-end
-end
-return target
-end
-
-local function TrackBullets()
-if not Config.bt then return end
-local target=GetTarget()
-if not target then return end
-for _,v in pairs(workspace:GetDescendants()) do
-if v:IsA("BasePart") and (v.Name:lower():find("bullet") or v.Name:lower():find("projectile")) then
-local dist=(v.Position-target.Position).Magnitude
-if dist<300 then
-local dir=(target.Position-v.Position).Unit
-v.Velocity=dir*250
-v.CFrame=CFrame.new(v.Position,target.Position)
-end
-end
-end
-end
-RunService.RenderStepped:Connect(function()
-local cam=workspace.CurrentCamera
-if not cam then return end
-
-if Config.esp then
-for _,plr in pairs(Players:GetPlayers()) do
-if plr~=LocalPlayer and plr.Character then
-local h=plr.Character:FindFirstChildOfClass("Humanoid")
-if h and h.Health>0 then
-local has=false
-for _,v in pairs(espList) do
-if v.Adornee==plr.Character then has=true break end
-end
-if not has then
-local hl=Instance.new("Highlight")
-hl.FillColor=Color3.new(1,0,0)
-hl.FillTransparency=0.5
-hl.Adornee=plr.Character
-hl.Parent=plr.Character
-table.insert(espList,hl)
-end
-end
-end
+TipLabel.Text="❌ 战争大亨卡密错误！"
+wait(2)
+TipLabel.Text="如果能摸摸我的头的话，我会很开心的！"
 end
 else
-for _,v in pairs(espList) do
-v:Destroy()
-end
-espList={}
-end
-
-if Config.aim then
-local target=GetTarget()
-if target then
-local sp,on=cam:WorldToViewportPoint(target.Position)
-if on then
-local vs=cam.ViewportSize
-local dx=(sp.X-vs.X/2)*0.3
-local dy=(sp.Y-vs.Y/2)*0.3
-dx=math.clamp(dx,-30,30)
-dy=math.clamp(dy,-30,30)
-UserInputService:SetMouseDelta(Vector2.new(dx,dy))
-end
+-- 通用版：随便输入或者特定格式（这里随便填，方便测试）
+if #inputKey>0 then
+isValid=true
+else
+TipLabel.Text="❌ 请输入卡密！"
+wait(2)
+TipLabel.Text="如果能摸摸我的头的话，我会很开心的！"
 end
 end
 
-if Config.bt then
-TrackBullets()
-end
-
-if Config.speed then
-local h=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-if h then h.WalkSpeed=50 end
-end
-
-if Config.wall and LocalPlayer.Character then
-for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
-if v:IsA("BasePart") then
-v.CanCollide=false
-end
-end
+if isValid then
+MainFrame.Visible=false
+FunctionFrame.Visible=true
+TipLabel.Text="✅ 验证成功，欢迎使用！"
+wait(2)
+TipLabel.Text="如果能摸摸我的头的话，我会很开心的！"
 end
 end)
 
-print("AI辅助加载完成 - 无过检测版本")
+-- 验证成功后，功能按钮事件（这里先写简单开关，记得把具体功能代码填进去）
+local function Upd()
+SFunc.Text="状态: 自瞄"..(CF.aim and"开"or"关").." | 透视"..(CF.esp and"开"or"关").." | 加速"..(CF.spd and"开"or"关").." | 穿墙"..(CF.wall and"开"or"关").." | 子弹追踪"..(CF.bt and"开"or"关")
+end
+
+B1.MouseButton1Click:Connect(function() CF.aim=not CF.aim B1.BackgroundColor3=CF.aim and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1) Upd() end)
+B2.MouseButton1Click:Connect(function() CF.esp=not CF.esp B2.BackgroundColor3=CF.esp and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1) Upd() end)
+B3.MouseButton1Click:Connect(function() 
+CF.spd=not CF.spd 
+B3.BackgroundColor3=CF.spd and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+if h then h.WalkSpeed=CF.spd and 50 or 16 end
+Upd() 
+end)
+B4.MouseButton1Click:Connect(function() 
+CF.wall=not CF.wall 
+B4.BackgroundColor3=CF.wall and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1)
+if LP.Character then
+for _,v in pairs(LP.Character:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide=not CF.wall end end
+end
+Upd() 
+end)
+B5.MouseButton1Click:Connect(function() CF.bt=not CF.bt B5.BackgroundColor3=CF.bt and Color3.new(0.1,0.5,0.1) or Color3.new(0.5,0.1,0.1) Upd() end)
+
+-- 隐藏功能面板
+HideF.MouseButton1Click:Connect(function()
+FunctionFrame.Visible=not FunctionFrame.Visible
+HideF.Text=FunctionFrame.Visible and "-" or "+"
+end)
+
+print("AlienX 卡密系统加载完成")
