@@ -4,16 +4,12 @@ local LP=Players.LocalPlayer
 local UIS=game:GetService("UserInputService")
 local CG=game:GetService("CoreGui")
 
-local G=Instance.new("ScreenGui")
-G.ResetOnSpawn=false
-G.Parent=CG
-
 local Tip=Instance.new("Frame")
 Tip.Size=UDim2.new(0,420,0,35)
 Tip.Position=UDim2.new(0.5,-210,1,-55)
 Tip.BackgroundColor3=Color3.fromRGB(255,182,193)
 Tip.BackgroundTransparency=0.1
-Tip.Parent=G
+Tip.Parent=CG
 Instance.new("UICorner",Tip).CornerRadius=UDim.new(0,17)
 local TipLabel=Instance.new("TextLabel")
 TipLabel.Size=UDim2.new(1,-20,1,0)
@@ -27,6 +23,9 @@ TipLabel.Parent=Tip
 task.spawn(function() wait(3) Tip:Destroy() end)
 
 local BG_ID="rbxassetid://131248212024332"
+local G=Instance.new("ScreenGui")
+G.ResetOnSpawn=false
+G.Parent=CG
 local Main=Instance.new("Frame")
 Main.Size=UDim2.new(0,320,0,420)
 Main.Position=UDim2.new(0.5,-160,0.5,-210)
@@ -144,8 +143,8 @@ HideP.Font=Enum.Font.GothamBold
 HideP.TextSize=16
 Instance.new("UICorner",HideP).CornerRadius=UDim.new(0,6)
 HideP.Parent=PTitle
-
 local CF={aim=false,esp=false,spd=false,wall=false,bt=false,jump=false,noFall=false,fly=false}
+
 local function Btn(t,p)
     local b=Instance.new("TextButton")
     b.Size=UDim2.new(0,80,0,24)
@@ -169,6 +168,7 @@ local B5=Btn("子弹追踪",UDim2.new(0,10,0,96))
 local B6=Btn("高跳",UDim2.new(0,105,0,96))
 local B7=Btn("坠落无伤",UDim2.new(0,10,0,126))
 local B8=Btn("飞天",UDim2.new(0,105,0,126))
+
 local SpeedCfg={enabled=false,value=50,min=16,max=200,step=10}
 local SpeedPanel=Instance.new("Frame")
 SpeedPanel.Size=UDim2.new(0,240,0,26)
@@ -186,7 +186,6 @@ SubBtn.Font=Enum.Font.GothamBold
 SubBtn.TextSize=14
 Instance.new("UICorner",SubBtn).CornerRadius=UDim.new(0,6)
 SubBtn.Parent=SpeedPanel
-
 local SpeedLabel=Instance.new("TextLabel")
 SpeedLabel.Size=UDim2.new(0,140,0,22)
 SpeedLabel.Position=UDim2.new(0,32,0,2)
@@ -222,6 +221,7 @@ RingStroke.Thickness=1.5
 RingStroke.Transparency=0.3
 RingStroke.Parent=AimRing
 Instance.new("UICorner",AimRing).CornerRadius=UDim.new(1,0)
+
 local CrossV=Instance.new("Frame")
 CrossV.Size=UDim2.new(0,2,0,20)
 CrossV.Position=UDim2.new(0.5,-1,0.5,-30)
@@ -229,7 +229,6 @@ CrossV.BackgroundColor3=Color3.fromRGB(255,0,0)
 CrossV.BorderSizePixel=0
 CrossV.Visible=false
 CrossV.Parent=G
-
 local CrossV2=CrossV:Clone()
 CrossV2.Position=UDim2.new(0.5,-1,0.5,10)
 CrossV2.Parent=G
@@ -252,6 +251,7 @@ GreenLine.BorderSizePixel=0
 GreenLine.Visible=false
 GreenLine.ZIndex=5
 GreenLine.Parent=G
+
 local function GetHum()
     local c=LP.Character
     return c and c:FindFirstChildOfClass("Humanoid")
@@ -276,7 +276,6 @@ local function ApplyJump()
         h.JumpPower=CF.jump and 120 or 50
     end
 end
-
 local function ApplyNoFall()
     local c=LP.Character
     if not c then return end
@@ -305,6 +304,7 @@ local function GetTarget()
     end
     return t
 end
+
 local lockedTarget=nil
 
 local function GetRingTarget()
@@ -329,7 +329,6 @@ local function GetRingTarget()
     end
     return best
 end
-
 local WallCfg={enabled=false,lockedY=nil}
 local function ApplyWall()
     local c=LP.Character
@@ -370,89 +369,9 @@ local function Track()
         end
     end
 end
-local FlyCfg={enabled=false,speed=50,min=10,max=300,step=10}
-
-local Joy=Instance.new("Frame")
-Joy.Size=UDim2.new(0,120,0,120)
-Joy.Position=UDim2.new(0,50,1,-170)
-Joy.BackgroundColor3=Color3.fromRGB(30,30,45)
-Joy.BackgroundTransparency=0.4
-Joy.Visible=false
-Joy.Parent=G
-Instance.new("UICorner",Joy).CornerRadius=UDim.new(1,0)
-
-local Knob=Instance.new("Frame")
-Knob.Size=UDim2.new(0,50,0,50)
-Knob.Position=UDim2.new(0.5,-25,0.5,-25)
-Knob.BackgroundColor3=Color3.fromRGB(255,105,180)
-Knob.Parent=Joy
-Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
-
-local SpeedBox=Instance.new("Frame")
-SpeedBox.Size=UDim2.new(0,140,0,36)
-SpeedBox.Position=UDim2.new(0,180,1,-160)
-SpeedBox.BackgroundColor3=Color3.fromRGB(30,30,45)
-SpeedBox.BackgroundTransparency=0.3
-SpeedBox.Visible=false
-SpeedBox.Parent=G
-Instance.new("UICorner",SpeedBox).CornerRadius=UDim.new(0,8)
-
-local SpdLabel=Instance.new("TextLabel")
-SpdLabel.Size=UDim2.new(0,60,1,0)
-SpdLabel.Position=UDim2.new(0.5,-30,0,0)
-SpdLabel.BackgroundTransparency=1
-SpdLabel.Text="50"
-SpdLabel.TextColor3=Color3.fromRGB(255,255,255)
-SpdLabel.Font=Enum.Font.GothamBold
-SpdLabel.TextSize=14
-SpdLabel.Parent=SpeedBox
-
-local MinusBtn=Instance.new("TextButton")
-MinusBtn.Size=UDim2.new(0,30,1,0)
-MinusBtn.Position=UDim2.new(0,5,0,0)
-MinusBtn.BackgroundColor3=Color3.fromRGB(200,80,120)
-MinusBtn.Text="-"
-MinusBtn.TextColor3=Color3.fromRGB(255,255,255)
-MinusBtn.Font=Enum.Font.GothamBold
-MinusBtn.TextSize=16
-Instance.new("UICorner",MinusBtn).CornerRadius=UDim.new(0,6)
-MinusBtn.Parent=SpeedBox
-
-local PlusBtn=Instance.new("TextButton")
-PlusBtn.Size=UDim2.new(0,30,1,0)
-PlusBtn.Position=UDim2.new(1,-35,0,0)
-PlusBtn.BackgroundColor3=Color3.fromRGB(120,180,255)
-PlusBtn.Text="+"
-PlusBtn.TextColor3=Color3.fromRGB(255,255,255)
-PlusBtn.Font=Enum.Font.GothamBold
-PlusBtn.TextSize=16
-Instance.new("UICorner",PlusBtn).CornerRadius=UDim.new(0,6)
-PlusBtn.Parent=SpeedBox
-local UpBtn=Instance.new("TextButton")
-UpBtn.Size=UDim2.new(0,50,0,50)
-UpBtn.Position=UDim2.new(0,180,1,-115)
-UpBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-UpBtn.Text="▲"
-UpBtn.TextColor3=Color3.fromRGB(255,255,255)
-UpBtn.Font=Enum.Font.GothamBold
-UpBtn.TextSize=20
-UpBtn.Visible=false
-UpBtn.Parent=G
-Instance.new("UICorner",UpBtn).CornerRadius=UDim.new(0,10)
-
-local DownBtn=Instance.new("TextButton")
-DownBtn.Size=UDim2.new(0,50,0,50)
-DownBtn.Position=UDim2.new(0,235,1,-115)
-DownBtn.BackgroundColor3=Color3.fromRGB(200,80,80)
-DownBtn.Text="▼"
-DownBtn.TextColor3=Color3.fromRGB(255,255,255)
-DownBtn.Font=Enum.Font.GothamBold
-DownBtn.TextSize=20
-DownBtn.Visible=false
-DownBtn.Parent=G
-Instance.new("UICorner",DownBtn).CornerRadius=UDim.new(0,10)
-
+local FlyCfg={enabled=false,speed=50}
 local bv,bg=nil,nil
+
 local function StartFly()
     local r=GetRoot()
     local h=GetHum()
@@ -464,7 +383,9 @@ local function StartFly()
     bv.Parent=r
     bg=Instance.new("BodyGyro")
     bg.MaxTorque=Vector3.new(9e9,9e9,9e9)
-    bg.P=9e4 bg.D=1000 bg.CFrame=r.CFrame
+    bg.P=9e4
+    bg.D=1000
+    bg.CFrame=r.CFrame
     bg.Parent=r
 end
 
@@ -474,52 +395,6 @@ local function StopFly()
     if bv then bv:Destroy() bv=nil end
     if bg then bg:Destroy() bg=nil end
 end
-local joyInput={x=0,y=0}
-local dragging=false
-local center=Joy.AbsolutePosition+Joy.AbsoluteSize/2
-
-local function UpdateJoy(input)
-    local dx=input.Position.X-center.X
-    local dy=input.Position.Y-center.Y
-    local maxR=45
-    local d=math.sqrt(dx*dx+dy*dy)
-    if d>maxR then dx=dx/d*maxR dy=dy/d*maxR end
-    Knob.Position=UDim2.new(0.5,-25+dx,0.5,-25+dy)
-    joyInput.x=dx/maxR joyInput.y=dy/maxR
-end
-
-Knob.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        dragging=true
-    end
-end)
-UIS.InputChanged:Connect(function(i)
-    if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
-        UpdateJoy(i)
-    end
-end)
-UIS.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        dragging=false
-        Knob.Position=UDim2.new(0.5,-25,0.5,-25)
-        joyInput.x=0 joyInput.y=0
-    end
-end)
-
-local liftY=0
-UpBtn.MouseButton1Down:Connect(function() liftY=1 end)
-UpBtn.MouseButton1Up:Connect(function() liftY=0 end)
-DownBtn.MouseButton1Down:Connect(function() liftY=-1 end)
-DownBtn.MouseButton1Up:Connect(function() liftY=0 end)
-
-MinusBtn.MouseButton1Click:Connect(function()
-    FlyCfg.speed=math.max(FlyCfg.min,FlyCfg.speed-FlyCfg.step)
-    SpdLabel.Text=tostring(FlyCfg.speed)
-end)
-PlusBtn.MouseButton1Click:Connect(function()
-    FlyCfg.speed=math.min(FlyCfg.max,FlyCfg.speed+FlyCfg.step)
-    SpdLabel.Text=tostring(FlyCfg.speed)
-end)
 KeyBtn.MouseButton1Click:Connect(function()
     local key=KeyBox.Text
     local ok=false
@@ -551,84 +426,10 @@ B7.MouseButton1Click:Connect(function() CF.noFall=not CF.noFall B7.BackgroundCol
 B8.MouseButton1Click:Connect(function()
     CF.fly=not CF.fly
     B8.BackgroundColor3=CF.fly and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
-    if CF.fly then StartFly() Joy.Visible=true SpeedBox.Visible=true UpBtn.Visible=true DownBtn.Visible=true
-    else StopFly() Joy.Visible=false SpeedBox.Visible=false UpBtn.Visible=false DownBtn.Visible=false end
+    if CF.fly then StartFly() else StopFly() end
 end)
 SubBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value ApplySpeed() end)
 AddBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value ApplySpeed() end)
-local function UpdateGreenLine(target)
-    local cam=workspace.CurrentCamera
-    if not cam or not target then GreenLine.Visible=false return end
-    local sp,on=cam:WorldToViewportPoint(target.Position)
-    if not on then GreenLine.Visible=false return end
-    local vs=cam.ViewportSize
-    local cx,cy=vs.X/2,vs.Y/2
-    local dx,dy=sp.X-cx,sp.Y-cy
-    GreenLine.Size=UDim2.new(0,math.sqrt(dx*dx+dy*dy),0,2)
-    GreenLine.Position=UDim2.new(0,cx,0,cy-1)
-    GreenLine.Rotation=math.deg(math.atan2(dy,dx))
-    GreenLine.Visible=true
-end
-
-local espList={}
-RunService.RenderStepped:Connect(function()
-    local cam=workspace.CurrentCamera
-    if not cam then return end
-    if CF.aim then
-        local t=GetTarget()
-        if t then
-            local sp,on=cam:WorldToViewportPoint(t.Position)
-            if on then
-                local vs=cam.ViewportSize
-                local dx=(sp.X-vs.X/2)*0.3
-                local dy=(sp.Y-vs.Y/2)*0.3
-                UIS:SetMouseDelta(Vector2.new(math.clamp(dx,-30,30),math.clamp(dy,-30,30)))
-            end
-        end
-    end
-    if CF.esp then
-        for _,p in pairs(Players:GetPlayers()) do
-            if p~=LP and p.Character then
-                local h=p.Character:FindFirstChildOfClass("Humanoid")
-                if h and h.Health>0 then
-                    local has=false
-                    for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
-                    if not has then
-                        local hl=Instance.new("Highlight")
-                        hl.FillColor=Color3.fromRGB(255,182,193)
-                        hl.FillTransparency=0.5
-                        hl.Adornee=p.Character
-                        hl.Parent=p.Character
-                        table.insert(espList,hl)
-                    end
-                end
-            end
-        end
-    else
-        for _,v in pairs(espList) do v:Destroy() end
-        espList={}
-    end
-    if SpeedCfg.enabled then ApplySpeed() end
-    if CF.jump then ApplyJump() end
-    if CF.noFall then ApplyNoFall() end
-    if WallCfg.enabled then ApplyWall() end
-    if CF.bt then
-        local rt=GetRingTarget()
-        if rt then lockedTarget=rt UpdateGreenLine(rt) else lockedTarget=nil GreenLine.Visible=false end
-        Track()
-    end
-    if CF.fly and bv and bg then
-        local r=GetRoot()
-        if r then
-            local moveDir=cam.CFrame.RightVector*joyInput.x - cam.CFrame.LookVector*joyInput.y
-            moveDir=Vector3.new(moveDir.X,0,moveDir.Z)
-            bv.Velocity=moveDir*FlyCfg.speed+Vector3.new(0,liftY*FlyCfg.speed,0)
-            bg.CFrame=CFrame.new(r.Position,cam.CFrame.LookVector*100+r.Position)
-        end
-    end
-end)
-
--- 悬浮球
 local Ball=Instance.new("TextButton")
 Ball.Size=UDim2.new(0,44,0,44)
 Ball.Position=UDim2.new(1,-60,1,-60)
@@ -658,5 +459,85 @@ Ball.InputEnded:Connect(function(i)
 end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
+local function UpdateGreenLine(target)
+    local cam=workspace.CurrentCamera
+    if not cam or not target then GreenLine.Visible=false return end
+    local sp,on=cam:WorldToViewportPoint(target.Position)
+    if not on then GreenLine.Visible=false return end
+    local vs=cam.ViewportSize
+    local cx,cy=vs.X/2,vs.Y/2
+    local dx,dy=sp.X-cx,sp.Y-cy
+    GreenLine.Size=UDim2.new(0,math.sqrt(dx*dx+dy*dy),0,2)
+    GreenLine.Position=UDim2.new(0,cx,0,cy-1)
+    GreenLine.Rotation=math.deg(math.atan2(dy,dx))
+    GreenLine.Visible=true
+end
 
-print("樱の辅助 V5 加载完成")
+local espList={}
+RunService.RenderStepped:Connect(function()
+    local cam=workspace.CurrentCamera
+    if not cam then return end
+    
+    if CF.aim then
+        local t=GetTarget()
+        if t then
+            local sp,on=cam:WorldToViewportPoint(t.Position)
+            if on then
+                local vs=cam.ViewportSize
+                local dx=(sp.X-vs.X/2)*0.3
+                local dy=(sp.Y-vs.Y/2)*0.3
+                UIS:SetMouseDelta(Vector2.new(math.clamp(dx,-30,30),math.clamp(dy,-30,30)))
+            end
+        end
+    end
+    
+    if CF.esp then
+        for _,p in pairs(Players:GetPlayers()) do
+            if p~=LP and p.Character then
+                local h=p.Character:FindFirstChildOfClass("Humanoid")
+                if h and h.Health>0 then
+                    local has=false
+                    for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
+                    if not has then
+                        local hl=Instance.new("Highlight")
+                        hl.FillColor=Color3.fromRGB(255,182,193)
+                        hl.FillTransparency=0.5
+                        hl.Adornee=p.Character
+                        hl.Parent=p.Character
+                        table.insert(espList,hl)
+                    end
+                end
+            end
+        end
+    else
+        for _,v in pairs(espList) do v:Destroy() end
+        espList={}
+    end
+        if SpeedCfg.enabled then ApplySpeed() end
+    if CF.jump then ApplyJump() end
+    if CF.noFall then ApplyNoFall() end
+    if WallCfg.enabled then ApplyWall() end
+    
+    if CF.bt then
+        local rt=GetRingTarget()
+        if rt then lockedTarget=rt UpdateGreenLine(rt) else lockedTarget=nil GreenLine.Visible=false end
+        Track()
+    end
+    
+    if CF.fly and bv and bg then
+        local r=GetRoot()
+        if r then
+            local h=GetHum()
+            local moveDir=Vector3.new(0,0,0)
+            if h then
+                local md=h.MoveDirection
+                moveDir=Vector3.new(md.X,0,md.Z)
+            end
+            local liftY=cam.CFrame.LookVector.Y
+            bv.Velocity=moveDir*FlyCfg.speed + Vector3.new(0,liftY*FlyCfg.speed,0)
+            bg.CFrame=CFrame.new(r.Position,cam.CFrame.LookVector*100+r.Position)
+        end
+    end
+end)
+
+print("樱の辅助 V6 加载完成")
