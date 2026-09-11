@@ -26,59 +26,32 @@ local BG_ID="rbxassetid://131248212024332"
 local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
-local GameEnv={speedMethod="WalkSpeed",hasAC=false}
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if h then
-            local old=h.WalkSpeed
-            pcall(function() h.WalkSpeed=100 end)
-            task.wait(0.1)
-            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
-            pcall(function() h.WalkSpeed=old end)
-        end
-        for _,v in pairs(game:GetDescendants()) do
-            if v:IsA("Script")or v:IsA("LocalScript")then
-                local n=v.Name:lower()
-                if n:find("anticheat")or n:find("detect")then GameEnv.hasAC=true break end
-            end
-        end
-        print("[环境] 加速:"..GameEnv.speedMethod.." 反作弊:"..tostring(GameEnv.hasAC))
-    end)
-end)
 
-local kickLog={}
-pcall(function()
-    LP.Kick=function(self,msg)
-        table.insert(kickLog,{time=os.time(),msg=tostring(msg)})
-        warn("[防踢] 拦截: "..tostring(msg))
-        return nil
-    end
-end)
-pcall(function()
-    for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-        if v:IsA("RemoteEvent")then
-            local n=v.Name:lower()
-            if n:find("kick")or n:find("ban")then
-                pcall(function() v.OnClientEvent=function() end end)
-            end
+-- ==================== 模块化注册系统 ====================
+local Features={}      -- 所有功能注册表
+local FeatureState={}   -- 功能开关状态
+
+-- 注册功能（后续添加只需调用这个）
+function RegisterFeature(key,config)
+    Features[key]=config
+    FeatureState[key]=false
+end
+
+-- 统一开关（按钮调用）
+function ToggleFeature(key)
+    if not Features[key] then return false end
+    FeatureState[key]=not FeatureState[key]
+    return FeatureState[key]
+end
+
+-- 执行所有已开启的功能
+function RunAllFeatures(dt)
+    for key,cfg in pairs(Features) do
+        if FeatureState[key] and cfg.run then
+            pcall(cfg.run,dt)
         end
     end
-end)
-task.spawn(function()
-    while true do
-        task.wait(3)
-        pcall(function()
-            for _,v in pairs(workspace:GetDescendants())do
-                if v:IsA("BoolValue")or v:IsA("StringValue")then
-                    local n=v.Name:lower()
-                    if n:find("kick")or n:find("ban")or n:find("flag")then v:Destroy() end
-                end
-            end
-        end)
-    end
-end)
+end
 local Main=Instance.new("Frame")
 Main.Size=UDim2.new(0,320,0,420)
 Main.Position=UDim2.new(0.5,-160,0.5,-210)
@@ -149,8 +122,8 @@ KeyBtn.TextSize=16
 KeyBtn.Parent=Main
 Instance.new("UICorner",KeyBtn).CornerRadius=UDim.new(0,12)
 local Panel=Instance.new("Frame")
-Panel.Size=UDim2.new(0,280,0,320)
-Panel.Position=UDim2.new(0.5,-140,0.5,-160)
+Panel.Size=UDim2.new(0,280,0,360)
+Panel.Position=UDim2.new(0.5,-140,0.5,-180)
 Panel.BackgroundColor3=Color3.fromRGB(255,240,245)
 Panel.BackgroundTransparency=0.05
 Panel.Active=true
@@ -196,14 +169,24 @@ HideP.Font=Enum.Font.GothamBold
 HideP.TextSize=16
 Instance.new("UICorner",HideP).CornerRadius=UDim.new(0,6)
 HideP.Parent=PTitle
+local BTNS={}  -- 所有按钮
+local BTN_POS={
+    {0,10,0,36},{0,105,0,36},
+    {0,10,0,66},{0,105,0,66},
+    {0,10,0,96},{0,105,0,96},
+    {0,10,0,126},{0,105,0,126},
+    {0,10,0,156},{0,105,0,156},
+    {0,10,0,186},{0,105,0,186}
+}
+local BTN_INDEX=1
 
-local CF={aim=false,esp=false,spd=false,wall=false,bt=false,jump=false,noFall=false}
-local SpeedCfg={enabled=false,value=50,min=16,max=200,step=10}
-local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
-local function Btn(t,p)
+local function Btn(t)
+    if BTN_INDEX>#BTN_POS then return nil end
+    local p=BTN_POS[BTN_INDEX]
+    BTN_INDEX=BTN_INDEX+1
     local b=Instance.new("TextButton")
     b.Size=UDim2.new(0,80,0,24)
-    b.Position=p
+    b.Position=UDim2.new(p[1],p[2],p[3],p[4])
     b.BackgroundTransparency=0.25
     b.BackgroundColor3=Color3.fromRGB(255,105,180)
     b.Text=t
@@ -212,21 +195,31 @@ local function Btn(t,p)
     b.TextSize=9
     Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
     b.Parent=Panel
+    table.insert(BTNS,b)
     return b
 end
 
-local B1=Btn("自瞄",UDim2.new(0,10,0,36))
-local B2=Btn("透视",UDim2.new(0,105,0,36))
-local B3=Btn("加速",UDim2.new(0,10,0,66))
-local B4=Btn("穿墙",UDim2.new(0,105,0,66))
-local B5=Btn("物品追踪",UDim2.new(0,10,0,96))
-local B6=Btn("高跳",UDim2.new(0,105,0,96))
-local B7=Btn("坠落无伤",UDim2.new(0,10,0,126))
-local B8=Btn("范围:开",UDim2.new(0,105,0,126))
+local B1=Btn("自瞄")
+local B2=Btn("透视")
+local B3=Btn("加速")
+local B4=Btn("穿墙")
+local B5=Btn("物品追踪")
+local B6=Btn("高跳")
+local B7=Btn("坠落无伤")
+local B8=Btn("范围:开")
+local B9=Btn("防踢:关")
+local B10=Btn("头顶显示")
+local SpeedCfg={value=50,min=16,max=200,step=10}
+local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
+local WallCfg={lockedY=nil,method=0}
+local GameEnv={speedMethod="WalkSpeed"}
+local AntiKickCfg={enabled=false}
+local kickLog={}
 
+-- 速度面板
 local SpeedPanel=Instance.new("Frame")
 SpeedPanel.Size=UDim2.new(0,240,0,26)
-SpeedPanel.Position=UDim2.new(0,15,0,158)
+SpeedPanel.Position=UDim2.new(0,15,0,216)
 SpeedPanel.BackgroundTransparency=1
 SpeedPanel.Parent=Panel
 
@@ -265,7 +258,7 @@ Instance.new("UICorner",AddBtn).CornerRadius=UDim.new(0,6)
 AddBtn.Parent=SpeedPanel
 local RangePanel=Instance.new("Frame")
 RangePanel.Size=UDim2.new(0,240,0,26)
-RangePanel.Position=UDim2.new(0,15,0,186)
+RangePanel.Position=UDim2.new(0,15,0,244)
 RangePanel.BackgroundTransparency=1
 RangePanel.Parent=Panel
 
@@ -379,106 +372,63 @@ local function GetRingTarget()
     end
     return best
 end
-local speedMethod=0
-local speedHooked=nil
-
-local function SpeedM1()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.WalkSpeed=SpeedCfg.value end)
-    task.wait(0.05)
-    local h2=GetHum()
-    return h2 and math.abs(h2.WalkSpeed-SpeedCfg.value)<2
-end
-
-local function SpeedM2()
-    local h=GetHum()
-    if not h then return false end
-    local ok=false
-    pcall(function()
-        if speedHooked~=h then
-            speedHooked=h
-            h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-                if SpeedCfg.enabled and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
-                    h.WalkSpeed=SpeedCfg.value
-                end
+RegisterFeature("speed",{
+    run=function()
+        local h=GetHum()
+        if not h then return end
+        pcall(function() h.WalkSpeed=SpeedCfg.value end)
+        if not GameEnv.speedHooked or GameEnv.speedHooked~=h then
+            GameEnv.speedHooked=h
+            pcall(function()
+                h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+                    if FeatureState.speed and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
+                        h.WalkSpeed=SpeedCfg.value
+                    end
+                end)
             end)
         end
-        h.WalkSpeed=SpeedCfg.value
-        ok=true
-    end)
-    task.wait(0.1)
-    return ok
-end
+    end
+})
 
-local function ApplySpeed()
-    if not SpeedCfg.enabled then
-        speedMethod=0
+RegisterFeature("jump",{
+    run=function()
         local h=GetHum()
-        if h then pcall(function() h.WalkSpeed=16 end) end
-        return
+        if not h then return end
+        pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
     end
-    if GameEnv.speedMethod=="Hook" then
-        if speedMethod==0 then speedMethod=2 end
-    else
-        if speedMethod==0 then speedMethod=1 end
+})
+
+RegisterFeature("noFall",{
+    run=function()
+        local h=GetHum()
+        if not h then return end
+        pcall(function()
+            h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
+            h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
+            if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
+        end)
     end
-    if speedMethod==1 then SpeedM1() return end
-    if speedMethod==2 then SpeedM2() return end
-    if SpeedM1() then speedMethod=1 print("[加速] 方法1") return end
-    if SpeedM2() then speedMethod=2 print("[加速] 方法2") return end
-end
-local WallCfg={enabled=false,lockedY=nil,method=0}
-local wallBP=nil
-
-local function WallM1()
-    local c=LP.Character
-    if not c then return false end
-    pcall(function()
-        for _,v in pairs(c:GetDescendants())do
-            if v:IsA("BasePart")then v.CanCollide=false end
-        end
-    end)
-    task.wait(0.05)
-    local r=c:FindFirstChild("HumanoidRootPart")
-    return r and r.CanCollide==false
-end
-
-local function WallM2()
-    local c=LP.Character
-    if not c then return false end
-    local ok=false
-    pcall(function()
-        local PS=game:GetService("PhysicsService")
-        for _,v in pairs(c:GetDescendants())do
-            if v:IsA("BasePart")then
-                pcall(function() PS:SetPartCollisionGroup(v,"NoCollide") end)
+})
+RegisterFeature("wall",{
+    run=function()
+        local c=LP.Character
+        if not c then return end
+        pcall(function()
+            for _,v in pairs(c:GetDescendants())do
+                if v:IsA("BasePart")then v.CanCollide=false end
+            end
+        end)
+        if WallCfg.lockedY then
+            local r=c:FindFirstChild("HumanoidRootPart")
+            if r then
+                local pos=r.Position
+                if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
+                    pcall(function() r.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z) end)
+                end
             end
         end
-        ok=true
-    end)
-    return ok
-end
-
-local function WallM3()
-    local r=GetRoot()
-    if not r then return false end
-    pcall(function()
-        if not wallBP then
-            wallBP=Instance.new("BodyPosition")
-            wallBP.Name="_wallBP"
-            wallBP.MaxForce=Vector3.new(0,1e5,0)
-            wallBP.Position=r.Position+Vector3.new(0,2,0)
-            wallBP.Parent=r
-        end
-    end)
-    return wallBP~=nil
-end
-
-local function ApplyWall()
-    if not WallCfg.enabled then
-        WallCfg.method=0
-        if wallBP then wallBP:Destroy() wallBP=nil end
+    end,
+    onDisable=function()
         local c=LP.Character
         if c then
             pcall(function()
@@ -487,185 +437,48 @@ local function ApplyWall()
                 end
             end)
         end
-        return
+        WallCfg.lockedY=nil
     end
-    if WallCfg.method==1 then WallM1() return end
-    if WallCfg.method==2 then WallM2() return end
-    if WallCfg.method==3 then WallM3() return end
-    if WallM1() then WallCfg.method=1 print("[穿墙] 方法1") return end
-    if WallM2() then WallCfg.method=2 print("[穿墙] 方法2") return end
-    if WallM3() then WallCfg.method=3 print("[穿墙] 方法3") return end
-end
-local jumpMethod=0
-
-local function JumpM1()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
-    task.wait(0.05)
-    return h and h.JumpPower and h.JumpPower>=100
-end
-
-local function JumpM2()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.UseJumpPower=false h.JumpHeight=30 end)
-    task.wait(0.05)
-    return h and h.JumpHeight and h.JumpHeight>=20
-end
-
-local function ApplyJump()
-    if not CF.jump then
-        jumpMethod=0
-        local h=GetHum()
-        if h then pcall(function() h.UseJumpPower=true h.JumpPower=50 end) end
-        return
-    end
-    if jumpMethod==1 then JumpM1() return end
-    if jumpMethod==2 then JumpM2() return end
-    if JumpM1() then jumpMethod=1 print("[高跳] 方法1") return end
-    if JumpM2() then jumpMethod=2 print("[高跳] 方法2") return end
-end
-
-local noFallMethod=0
-
-local function NoFallM1()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function()
-        h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
-        h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
-        if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
-    end)
-    return true
-end
-
-local function NoFallM2()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() if h.Health<h.MaxHealth then h.Health=h.MaxHealth end end)
-    return h.Health==h.MaxHealth
-end
-
-local function ApplyNoFall()
-    if not CF.noFall then noFallMethod=0 return end
-    if noFallMethod==1 then NoFallM1() return end
-    if noFallMethod==2 then NoFallM2() return end
-    if NoFallM1() then noFallMethod=1 print("[坠落] 方法1") return end
-    if NoFallM2() then noFallMethod=2 print("[坠落] 方法2") return end
-end
+})
 local espList={}
-local espMethod=0
-
-local function ClearESP()
-    for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
-    espList={}
-end
-
-local function EspM1()
-    for _,p in pairs(Players:GetPlayers())do
-        if p~=LP and p.Character then
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health>0 then
-                local has=false
-                for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-                if not has then
-                    pcall(function()
-                        local hl=Instance.new("Highlight")
-                        hl.FillColor=Color3.fromRGB(255,182,193)
-                        hl.FillTransparency=0.5
-                        hl.Adornee=p.Character
-                        hl.Parent=p.Character
-                        table.insert(espList,hl)
-                    end)
+RegisterFeature("esp",{
+    run=function()
+        for _,p in pairs(Players:GetPlayers())do
+            if p~=LP and p.Character then
+                local h=p.Character:FindFirstChildOfClass("Humanoid")
+                if h and h.Health>0 then
+                    local has=false
+                    for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
+                    if not has then
+                        pcall(function()
+                            local hl=Instance.new("Highlight")
+                            hl.FillColor=Color3.fromRGB(255,182,193)
+                            hl.FillTransparency=0.5
+                            hl.Adornee=p.Character
+                            hl.Parent=p.Character
+                            table.insert(espList,hl)
+                        end)
+                    end
                 end
             end
         end
+    end,
+    onDisable=function()
+        for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
+        espList={}
     end
-    return #espList>0
-end
-
-local function EspM2()
-    for _,p in pairs(Players:GetPlayers())do
-        if p~=LP and p.Character then
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health>0 then
-                local has=false
-                for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-                if not has then
-                    pcall(function()
-                        local sb=Instance.new("SelectionBox")
-                        sb.Color3=Color3.fromRGB(255,105,180)
-                        sb.Adornee=p.Character
-                        sb.Parent=p.Character
-                        table.insert(espList,sb)
-                    end)
-                end
-            end
-        end
+})
+RegisterFeature("aim",{
+    run=function()
+        local target=GetTarget()
+        if not target then return end
+        local cam=workspace.CurrentCamera
+        if not cam then return end
+        pcall(function()
+            cam.CFrame=CFrame.new(cam.CFrame.Position,target.Position)
+        end)
     end
-    return #espList>0
-end
-
-local function ApplyESP()
-    if not CF.esp then espMethod=0 ClearESP() return end
-    if espMethod==1 then EspM1() return end
-    if espMethod==2 then EspM2() return end
-    if EspM1() then espMethod=1 print("[透视] 方法1") return end
-    if EspM2() then espMethod=2 print("[透视] 方法2") return end
-end
-local aimMethod=0
-
-local function AimM1(target)
-    local cam=workspace.CurrentCamera
-    if not cam then return false end
-    local ok=false
-    pcall(function()
-        cam.CFrame=CFrame.new(cam.CFrame.Position,target.Position)
-        ok=true
-    end)
-    return ok
-end
-
-local function AimM2(target)
-    local cam=workspace.CurrentCamera
-    if not cam or not UIS.SetMouseDelta then return false end
-    local ok=false
-    pcall(function()
-        local sp,on=cam:WorldToViewportPoint(target.Position)
-        if on then
-            local vs=cam.ViewportSize
-            local dx=(sp.X-vs.X/2)*0.3
-            local dy=(sp.Y-vs.Y/2)*0.3
-            UIS:SetMouseDelta(Vector2.new(math.clamp(dx,-30,30),math.clamp(dy,-30,30)))
-            ok=true
-        end
-    end)
-    return ok
-end
-
-local function AimM3(target)
-    local r=GetRoot()
-    if not r then return false end
-    local ok=false
-    pcall(function()
-        r.CFrame=CFrame.new(r.Position,Vector3.new(target.Position.X,r.Position.Y,target.Position.Z))
-        ok=true
-    end)
-    return ok
-end
-
-local function ApplyAim()
-    if not CF.aim then aimMethod=0 return end
-    local target=GetTarget()
-    if not target then return end
-    if aimMethod==1 then AimM1(target) return end
-    if aimMethod==2 then AimM2(target) return end
-    if aimMethod==3 then AimM3(target) return end
-    if AimM1(target) then aimMethod=1 print("[自瞄] 方法1") return end
-    if AimM2(target) then aimMethod=2 print("[自瞄] 方法2") return end
-    if AimM3(target) then aimMethod=3 print("[自瞄] 方法3") return end
-end
+})
 local headList={}
 
 local function IsMine(obj)
@@ -686,21 +499,6 @@ local function IsTrackable(v)
     return false
 end
 
-local function Track()
-    if not CF.bt or not lockedTarget then return end
-    for _,v in pairs(workspace:GetDescendants())do
-        if IsTrackable(v) and not IsMine(v) then
-            if (v.Position-lockedTarget.Position).Magnitude<350 then
-                local dir=(lockedTarget.Position-v.Position).Unit
-                pcall(function()
-                    v.Velocity=dir*250
-                    v.CFrame=CFrame.new(v.Position,lockedTarget.Position)
-                end)
-            end
-        end
-    end
-end
-
 local function UpdateGreenLine(target)
     local cam=workspace.CurrentCamera
     if not cam or not target then GreenLine.Visible=false return end
@@ -714,6 +512,35 @@ local function UpdateGreenLine(target)
     GreenLine.Rotation=math.deg(math.atan2(dy,dx))
     GreenLine.Visible=true
 end
+
+RegisterFeature("bt",{
+    run=function()
+        local rt=GetRingTarget()
+        if rt then
+            lockedTarget=rt
+            UpdateGreenLine(rt)
+        else
+            lockedTarget=nil
+            GreenLine.Visible=false
+        end
+        if not lockedTarget then return end
+        for _,v in pairs(workspace:GetDescendants())do
+            if IsTrackable(v) and not IsMine(v) then
+                if (v.Position-lockedTarget.Position).Magnitude<350 then
+                    local dir=(lockedTarget.Position-v.Position).Unit
+                    pcall(function()
+                        v.Velocity=dir*250
+                        v.CFrame=CFrame.new(v.Position,lockedTarget.Position)
+                    end)
+                end
+            end
+        end
+    end,
+    onDisable=function()
+        GreenLine.Visible=false
+        lockedTarget=nil
+    end
+})
 local function UpdateHeadDisplay()
     for i=#headList,1,-1 do
         local item=headList[i]
@@ -775,6 +602,116 @@ local function UpdateHeadDisplay()
         end
     end
 end
+
+RegisterFeature("head",{
+    run=function() UpdateHeadDisplay() end,
+    onDisable=function()
+        for _,item in pairs(headList)do
+            if item.bg then pcall(function() item.bg:Destroy() end) end
+        end
+        headList={}
+    end
+})
+local antiKickLoop=nil
+
+RegisterFeature("antiKick",{
+    run=nil,  -- 防踢不需要每帧执行
+    onEnable=function()
+        pcall(function()
+            LP.Kick=function(self,msg)
+                table.insert(kickLog,{msg=tostring(msg),time=os.time()})
+                warn("[防踢] 拦截: "..tostring(msg))
+                return nil
+            end
+        end)
+        pcall(function()
+            for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants())do
+                if v:IsA("RemoteEvent")then
+                    local n=v.Name:lower()
+                    if n:find("kick")or n:find("ban")then
+                        pcall(function() v.OnClientEvent=function() end end)
+                    end
+                end
+            end
+        end)
+        antiKickLoop=task.spawn(function()
+            while FeatureState.antiKick do
+                task.wait(2)
+                pcall(function()
+                    for _,v in pairs(workspace:GetDescendants())do
+                        if v:IsA("BoolValue")or v:IsA("StringValue")then
+                            local n=v.Name:lower()
+                            if n:find("kick")or n:find("ban")or n:find("flag")then v:Destroy() end
+                        end
+                    end
+                end)
+            end
+        end)
+        print("[防踢] 已开启")
+    end,
+    onDisable=function()
+        if antiKickLoop then
+            pcall(function() task.cancel(antiKickLoop) end)
+            antiKickLoop=nil
+        end
+        print("[防踢] 已关闭")
+    end
+})
+-- 统一开关处理器
+local function HandleToggle(key,btn,onText,offText)
+    local on=ToggleFeature(key)
+    btn.BackgroundColor3=on and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    if onText and offText then
+        btn.Text=on and onText or offText
+    end
+    local cfg=Features[key]
+    if cfg then
+        if on and cfg.onEnable then pcall(cfg.onEnable) end
+        if not on and cfg.onDisable then pcall(cfg.onDisable) end
+    end
+end
+
+-- 绑定按钮
+B1.MouseButton1Click:Connect(function() HandleToggle("aim",B1) end)
+B2.MouseButton1Click:Connect(function() HandleToggle("esp",B2) end)
+B3.MouseButton1Click:Connect(function() HandleToggle("speed",B3) end)
+B4.MouseButton1Click:Connect(function()
+    if not FeatureState.wall then
+        local r=GetRoot()
+        if r then WallCfg.lockedY=r.Position.Y end
+    end
+    HandleToggle("wall",B4)
+end)
+B5.MouseButton1Click:Connect(function()
+    HandleToggle("bt",B5)
+    AimRing.Visible=FeatureState.bt
+end)
+B6.MouseButton1Click:Connect(function() HandleToggle("jump",B6) end)
+B7.MouseButton1Click:Connect(function() HandleToggle("noFall",B7) end)
+B8.MouseButton1Click:Connect(function()
+    AimCfg.useRange=not AimCfg.useRange
+    B8.BackgroundColor3=AimCfg.useRange and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    B8.Text=AimCfg.useRange and "范围:开" or "范围:关"
+end)
+B9.MouseButton1Click:Connect(function() HandleToggle("antiKick",B9,"防踢:开","防踢:关") end)
+B10.MouseButton1Click:Connect(function() HandleToggle("head",B10) end)
+SubBtn.MouseButton1Click:Connect(function()
+    SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step)
+    SpeedLabel.Text="速度: "..SpeedCfg.value
+end)
+AddBtn.MouseButton1Click:Connect(function()
+    SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step)
+    SpeedLabel.Text="速度: "..SpeedCfg.value
+end)
+RgSub.MouseButton1Click:Connect(function()
+    AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step)
+    RangeLabel.Text="范围: "..AimCfg.range
+end)
+RgAdd.MouseButton1Click:Connect(function()
+    AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step)
+    RangeLabel.Text="范围: "..AimCfg.range
+end)
+
 KeyBtn.MouseButton1Click:Connect(function()
     local key=KeyBox.Text
     local ok=false
@@ -786,36 +723,21 @@ KeyBtn.MouseButton1Click:Connect(function()
     if ok then Main.Visible=false Panel.Visible=true end
 end)
 
-B1.MouseButton1Click:Connect(function() CF.aim=not CF.aim B1.BackgroundColor3=CF.aim and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B2.MouseButton1Click:Connect(function() CF.esp=not CF.esp B2.BackgroundColor3=CF.esp and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B3.MouseButton1Click:Connect(function() SpeedCfg.enabled=not SpeedCfg.enabled B3.BackgroundColor3=SpeedCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B4.MouseButton1Click:Connect(function()
-    WallCfg.enabled=not WallCfg.enabled
-    B4.BackgroundColor3=WallCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
-    if WallCfg.enabled then local r=GetRoot() if r then WallCfg.lockedY=r.Position.Y end else WallCfg.lockedY=nil end
+UIS.InputBegan:Connect(function(input,gp)
+    if not gp and input.KeyCode==Enum.KeyCode.F6 then
+        print("[防踢] 拦截记录:")
+        if #kickLog==0 then print("  (无记录)") else
+            for i,log in pairs(kickLog)do
+                print("  "..i..". "..(log.msg or ""))
+            end
+        end
+    end
 end)
-B5.MouseButton1Click:Connect(function()
-    CF.bt=not CF.bt
-    B5.BackgroundColor3=CF.bt and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
-    AimRing.Visible=CF.bt
-    if not CF.bt then GreenLine.Visible=false lockedTarget=nil end
-end)
-B6.MouseButton1Click:Connect(function() CF.jump=not CF.jump B6.BackgroundColor3=CF.jump and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B7.MouseButton1Click:Connect(function() CF.noFall=not CF.noFall B7.BackgroundColor3=CF.noFall and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B8.MouseButton1Click:Connect(function()
-    AimCfg.useRange=not AimCfg.useRange
-    B8.BackgroundColor3=AimCfg.useRange and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
-    B8.Text=AimCfg.useRange and "范围:开" or "范围:关"
-end)
-SubBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value end)
-AddBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value end)
-RgSub.MouseButton1Click:Connect(function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) RangeLabel.Text="范围: "..AimCfg.range end)
-RgAdd.MouseButton1Click:Connect(function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) RangeLabel.Text="范围: "..AimCfg.range end)
 local Ball=Instance.new("TextButton")
 Ball.Size=UDim2.new(0,44,0,44)
 Ball.Position=UDim2.new(1,-60,1,-60)
 Ball.BackgroundColor3=Color3.fromRGB(255,182,193)
-Ball.Text="🥵快射🥵"
+Ball.Text="樱"
 Ball.TextColor3=Color3.fromRGB(255,255,255)
 Ball.Font=Enum.Font.GothamBold
 Ball.TextSize=16
@@ -840,32 +762,42 @@ Ball.InputEnded:Connect(function(i)
 end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
-RunService.RenderStepped:Connect(function()
-    local cam=workspace.CurrentCamera
-    if not cam then return end
-    if CF.aim then ApplyAim() end
-    if CF.esp then ApplyESP() end
-    if SpeedCfg.enabled then ApplySpeed() end
-    if CF.jump then ApplyJump() end
-    if CF.noFall then ApplyNoFall() end
-    if WallCfg.enabled then
-        ApplyWall()
-        if WallCfg.lockedY then
-            local r=GetRoot()
-            if r then
-                local pos=r.Position
-                if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
-                    pcall(function() r.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z) end)
-                end
-            end
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if h then
+            local old=h.WalkSpeed
+            pcall(function() h.WalkSpeed=100 end)
+            task.wait(0.1)
+            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
+            pcall(function() h.WalkSpeed=old end)
         end
-    end
-    if CF.bt then
-        local rt=GetRingTarget()
-        if rt then lockedTarget=rt UpdateGreenLine(rt) else lockedTarget=nil GreenLine.Visible=false end
-        Track()
-    end
-    UpdateHeadDisplay()
+        print("[环境] 加速方案:"..GameEnv.speedMethod)
+    end)
 end)
 
-print("樱の辅助 V10 加载完成 - 全功能多重验证")
+RunService.RenderStepped:Connect(function(dt)
+    -- 遍历所有已开启的功能，统一执行
+    RunAllFeatures(dt)
+end)
+
+-- ==================== 后续添加功能示例 ====================
+-- 想加新功能，只要注册 + 加按钮 + 绑定事件即可，不用改老代码：
+--
+-- RegisterFeature("fly",{
+--     run=function()
+--         -- 飞行的每帧逻辑
+--     end,
+--     onEnable=function()
+--         -- 开启时执行一次
+--     end,
+--     onDisable=function()
+--         -- 关闭时执行一次
+--     end
+-- })
+-- local B11=Btn("飞天")
+-- B11.MouseButton1Click:Connect(function() HandleToggle("fly",B11) end)
+-- ====================
+
+print("樱の辅助 V11 加载完成 - 模块化注册系统")
