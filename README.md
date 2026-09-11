@@ -26,6 +26,59 @@ local BG_ID="rbxassetid://131248212024332"
 local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
+local GameEnv={speedMethod="WalkSpeed",hasAC=false}
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if h then
+            local old=h.WalkSpeed
+            pcall(function() h.WalkSpeed=100 end)
+            task.wait(0.1)
+            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
+            pcall(function() h.WalkSpeed=old end)
+        end
+        for _,v in pairs(game:GetDescendants()) do
+            if v:IsA("Script")or v:IsA("LocalScript")then
+                local n=v.Name:lower()
+                if n:find("anticheat")or n:find("detect")then GameEnv.hasAC=true break end
+            end
+        end
+        print("[环境] 加速:"..GameEnv.speedMethod.." 反作弊:"..tostring(GameEnv.hasAC))
+    end)
+end)
+
+local kickLog={}
+pcall(function()
+    LP.Kick=function(self,msg)
+        table.insert(kickLog,{time=os.time(),msg=tostring(msg)})
+        warn("[防踢] 拦截: "..tostring(msg))
+        return nil
+    end
+end)
+pcall(function()
+    for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+        if v:IsA("RemoteEvent")then
+            local n=v.Name:lower()
+            if n:find("kick")or n:find("ban")then
+                pcall(function() v.OnClientEvent=function() end end)
+            end
+        end
+    end
+end)
+task.spawn(function()
+    while true do
+        task.wait(3)
+        pcall(function()
+            for _,v in pairs(workspace:GetDescendants())do
+                if v:IsA("BoolValue")or v:IsA("StringValue")then
+                    local n=v.Name:lower()
+                    if n:find("kick")or n:find("ban")or n:find("flag")then v:Destroy() end
+                end
+            end
+        end)
+    end
+end)
 local Main=Instance.new("Frame")
 Main.Size=UDim2.new(0,320,0,420)
 Main.Position=UDim2.new(0.5,-160,0.5,-210)
@@ -143,10 +196,10 @@ HideP.Font=Enum.Font.GothamBold
 HideP.TextSize=16
 Instance.new("UICorner",HideP).CornerRadius=UDim.new(0,6)
 HideP.Parent=PTitle
+
 local CF={aim=false,esp=false,spd=false,wall=false,bt=false,jump=false,noFall=false}
 local SpeedCfg={enabled=false,value=50,min=16,max=200,step=10}
-local AimCfg={range=250,min=50,max=800,step=50}
-
+local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
 local function Btn(t,p)
     local b=Instance.new("TextButton")
     b.Size=UDim2.new(0,80,0,24)
@@ -169,6 +222,7 @@ local B4=Btn("穿墙",UDim2.new(0,105,0,66))
 local B5=Btn("物品追踪",UDim2.new(0,10,0,96))
 local B6=Btn("高跳",UDim2.new(0,105,0,96))
 local B7=Btn("坠落无伤",UDim2.new(0,10,0,126))
+local B8=Btn("范围:开",UDim2.new(0,105,0,126))
 
 local SpeedPanel=Instance.new("Frame")
 SpeedPanel.Size=UDim2.new(0,240,0,26)
@@ -186,6 +240,7 @@ SubBtn.Font=Enum.Font.GothamBold
 SubBtn.TextSize=14
 Instance.new("UICorner",SubBtn).CornerRadius=UDim.new(0,6)
 SubBtn.Parent=SpeedPanel
+
 local SpeedLabel=Instance.new("TextLabel")
 SpeedLabel.Size=UDim2.new(0,140,0,22)
 SpeedLabel.Position=UDim2.new(0,32,0,2)
@@ -208,7 +263,6 @@ AddBtn.Font=Enum.Font.GothamBold
 AddBtn.TextSize=14
 Instance.new("UICorner",AddBtn).CornerRadius=UDim.new(0,6)
 AddBtn.Parent=SpeedPanel
-
 local RangePanel=Instance.new("Frame")
 RangePanel.Size=UDim2.new(0,240,0,26)
 RangePanel.Position=UDim2.new(0,15,0,186)
@@ -248,6 +302,7 @@ RgAdd.Font=Enum.Font.GothamBold
 RgAdd.TextSize=14
 Instance.new("UICorner",RgAdd).CornerRadius=UDim.new(0,6)
 RgAdd.Parent=RangePanel
+
 local AimRing=Instance.new("Frame")
 AimRing.Size=UDim2.new(0,200,0,200)
 AimRing.Position=UDim2.new(0.5,-100,0.5,-100)
@@ -267,7 +322,6 @@ GreenLine.BorderSizePixel=0
 GreenLine.Visible=false
 GreenLine.ZIndex=5
 GreenLine.Parent=G
-
 local function GetHum()
     local c=LP.Character
     return c and c:FindFirstChildOfClass("Humanoid")
@@ -277,7 +331,54 @@ local function GetRoot()
     local c=LP.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
-local speedBV=nil
+
+local function GetTarget()
+    local r=GetRoot()
+    if not r then return nil end
+    local maxDist=AimCfg.useRange and AimCfg.range or 99999
+    local t,d=nil,maxDist
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local rr=p.Character:FindFirstChild("HumanoidRootPart")
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if rr and h and h.Health>0 then
+                local dist=(r.Position-rr.Position).Magnitude
+                if dist<d then d=dist t=rr end
+            end
+        end
+    end
+    return t
+end
+
+local lockedTarget=nil
+local function GetRingTarget()
+    local cam=workspace.CurrentCamera
+    if not cam then return nil end
+    local vs=cam.ViewportSize
+    local cx,cy=vs.X/2,vs.Y/2
+    local maxDist=AimCfg.useRange and AimCfg.range or 99999
+    local best,bestD=nil,maxDist
+    local r=GetRoot()
+    if not r then return nil end
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local rr=p.Character:FindFirstChild("HumanoidRootPart")
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if rr and h and h.Health>0 then
+                local d3=(r.Position-rr.Position).Magnitude
+                if d3<maxDist then
+                    local sp,on=cam:WorldToViewportPoint(rr.Position)
+                    if on then
+                        local dx,dy=sp.X-cx,sp.Y-cy
+                        local dist=math.sqrt(dx*dx+dy*dy)
+                        if dist<100 and dist<bestD then bestD=dist best=rr end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
 local speedMethod=0
 local speedHooked=nil
 
@@ -310,37 +411,22 @@ local function SpeedM2()
     return ok
 end
 
-local function SpeedM3()
-    local h=GetHum()
-    local r=GetRoot()
-    if not h or not r then return false end
-    pcall(function()
-        if not speedBV then
-            speedBV=Instance.new("BodyVelocity")
-            speedBV.Name="_spdBV"
-            speedBV.MaxForce=Vector3.new(1e6,0,1e6)
-            speedBV.Parent=r
-        end
-        local md=h.MoveDirection
-        speedBV.Velocity=Vector3.new(md.X,0,md.Z)*SpeedCfg.value
-    end)
-    return speedBV~=nil
-end
-
 local function ApplySpeed()
     if not SpeedCfg.enabled then
         speedMethod=0
-        if speedBV then speedBV:Destroy() speedBV=nil end
         local h=GetHum()
         if h then pcall(function() h.WalkSpeed=16 end) end
         return
     end
+    if GameEnv.speedMethod=="Hook" then
+        if speedMethod==0 then speedMethod=2 end
+    else
+        if speedMethod==0 then speedMethod=1 end
+    end
     if speedMethod==1 then SpeedM1() return end
     if speedMethod==2 then SpeedM2() return end
-    if speedMethod==3 then SpeedM3() return end
     if SpeedM1() then speedMethod=1 print("[加速] 方法1") return end
     if SpeedM2() then speedMethod=2 print("[加速] 方法2") return end
-    if SpeedM3() then speedMethod=3 print("[加速] 方法3") return end
 end
 local WallCfg={enabled=false,lockedY=nil,method=0}
 local wallBP=nil
@@ -349,8 +435,8 @@ local function WallM1()
     local c=LP.Character
     if not c then return false end
     pcall(function()
-        for _,v in pairs(c:GetDescendants()) do
-            if v:IsA("BasePart") then v.CanCollide=false end
+        for _,v in pairs(c:GetDescendants())do
+            if v:IsA("BasePart")then v.CanCollide=false end
         end
     end)
     task.wait(0.05)
@@ -364,8 +450,8 @@ local function WallM2()
     local ok=false
     pcall(function()
         local PS=game:GetService("PhysicsService")
-        for _,v in pairs(c:GetDescendants()) do
-            if v:IsA("BasePart") then
+        for _,v in pairs(c:GetDescendants())do
+            if v:IsA("BasePart")then
                 pcall(function() PS:SetPartCollisionGroup(v,"NoCollide") end)
             end
         end
@@ -396,8 +482,8 @@ local function ApplyWall()
         local c=LP.Character
         if c then
             pcall(function()
-                for _,v in pairs(c:GetDescendants()) do
-                    if v:IsA("BasePart") then v.CanCollide=true end
+                for _,v in pairs(c:GetDescendants())do
+                    if v:IsA("BasePart")then v.CanCollide=true end
                 end
             end)
         end
@@ -411,6 +497,7 @@ local function ApplyWall()
     if WallM3() then WallCfg.method=3 print("[穿墙] 方法3") return end
 end
 local jumpMethod=0
+
 local function JumpM1()
     local h=GetHum()
     if not h then return false end
@@ -418,6 +505,7 @@ local function JumpM1()
     task.wait(0.05)
     return h and h.JumpPower and h.JumpPower>=100
 end
+
 local function JumpM2()
     local h=GetHum()
     if not h then return false end
@@ -425,6 +513,7 @@ local function JumpM2()
     task.wait(0.05)
     return h and h.JumpHeight and h.JumpHeight>=20
 end
+
 local function ApplyJump()
     if not CF.jump then
         jumpMethod=0
@@ -437,20 +526,49 @@ local function ApplyJump()
     if JumpM1() then jumpMethod=1 print("[高跳] 方法1") return end
     if JumpM2() then jumpMethod=2 print("[高跳] 方法2") return end
 end
+
+local noFallMethod=0
+
+local function NoFallM1()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function()
+        h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
+        h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
+        if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
+    end)
+    return true
+end
+
+local function NoFallM2()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function() if h.Health<h.MaxHealth then h.Health=h.MaxHealth end end)
+    return h.Health==h.MaxHealth
+end
+
+local function ApplyNoFall()
+    if not CF.noFall then noFallMethod=0 return end
+    if noFallMethod==1 then NoFallM1() return end
+    if noFallMethod==2 then NoFallM2() return end
+    if NoFallM1() then noFallMethod=1 print("[坠落] 方法1") return end
+    if NoFallM2() then noFallMethod=2 print("[坠落] 方法2") return end
+end
 local espList={}
 local espMethod=0
+
 local function ClearESP()
-    for _,v in pairs(espList) do pcall(function() v:Destroy() end) end
+    for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
     espList={}
 end
 
 local function EspM1()
-    for _,p in pairs(Players:GetPlayers()) do
+    for _,p in pairs(Players:GetPlayers())do
         if p~=LP and p.Character then
             local h=p.Character:FindFirstChildOfClass("Humanoid")
             if h and h.Health>0 then
                 local has=false
-                for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
+                for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
                 if not has then
                     pcall(function()
                         local hl=Instance.new("Highlight")
@@ -468,12 +586,12 @@ local function EspM1()
 end
 
 local function EspM2()
-    for _,p in pairs(Players:GetPlayers()) do
+    for _,p in pairs(Players:GetPlayers())do
         if p~=LP and p.Character then
             local h=p.Character:FindFirstChildOfClass("Humanoid")
             if h and h.Health>0 then
                 local has=false
-                for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
+                for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
                 if not has then
                     pcall(function()
                         local sb=Instance.new("SelectionBox")
@@ -490,63 +608,13 @@ local function EspM2()
 end
 
 local function ApplyESP()
-    if not CF.esp then
-        espMethod=0
-        ClearESP()
-        return
-    end
+    if not CF.esp then espMethod=0 ClearESP() return end
     if espMethod==1 then EspM1() return end
     if espMethod==2 then EspM2() return end
     if EspM1() then espMethod=1 print("[透视] 方法1") return end
     if EspM2() then espMethod=2 print("[透视] 方法2") return end
 end
 local aimMethod=0
-local lockedTarget=nil
-
-local function GetTarget()
-    local r=GetRoot()
-    if not r then return nil end
-    local t,d=nil,AimCfg.range
-    for _,p in pairs(Players:GetPlayers()) do
-        if p~=LP and p.Character then
-            local rr=p.Character:FindFirstChild("HumanoidRootPart")
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if rr and h and h.Health>0 then
-                local dist=(r.Position-rr.Position).Magnitude
-                if dist<d then d=dist t=rr end
-            end
-        end
-    end
-    return t
-end
-
-local function GetRingTarget()
-    local cam=workspace.CurrentCamera
-    if not cam then return nil end
-    local vs=cam.ViewportSize
-    local cx,cy=vs.X/2,vs.Y/2
-    local best,bestD=nil,AimCfg.range
-    local r=GetRoot()
-    if not r then return nil end
-    for _,p in pairs(Players:GetPlayers()) do
-        if p~=LP and p.Character then
-            local rr=p.Character:FindFirstChild("HumanoidRootPart")
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if rr and h and h.Health>0 then
-                local d3=(r.Position-rr.Position).Magnitude
-                if d3<AimCfg.range then
-                    local sp,on=cam:WorldToViewportPoint(rr.Position)
-                    if on then
-                        local dx,dy=sp.X-cx,sp.Y-cy
-                        local dist=math.sqrt(dx*dx+dy*dy)
-                        if dist<100 and dist<bestD then bestD=dist best=rr end
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
 
 local function AimM1(target)
     local cam=workspace.CurrentCamera
@@ -598,6 +666,8 @@ local function ApplyAim()
     if AimM2(target) then aimMethod=2 print("[自瞄] 方法2") return end
     if AimM3(target) then aimMethod=3 print("[自瞄] 方法3") return end
 end
+local headList={}
+
 local function IsMine(obj)
     local creator=obj:FindFirstChild("Creator")
     if creator and creator.Value==LP then return true end
@@ -607,18 +677,18 @@ local function IsMine(obj)
 end
 
 local function IsTrackable(v)
-    if not v:IsA("BasePart") then return false end
+    if not v:IsA("BasePart")then return false end
     local n=v.Name:lower()
-    if n:find("bullet") or n:find("projectile") or n:find("missile") then return true end
-    if n:find("item") or n:find("drop") or n:find("pickup") or n:find("loot") then return true end
-    if n:find("coin") or n:find("gem") or n:find("cash") or n:find("money") then return true end
-    if n:find("resource") or n:find("ore") or n:find("wood") or n:find("stone") then return true end
+    if n:find("bullet")or n:find("projectile")or n:find("missile")then return true end
+    if n:find("item")or n:find("drop")or n:find("pickup")or n:find("loot")then return true end
+    if n:find("coin")or n:find("gem")or n:find("cash")or n:find("money")then return true end
+    if n:find("resource")or n:find("ore")or n:find("wood")or n:find("stone")then return true end
     return false
 end
 
 local function Track()
     if not CF.bt or not lockedTarget then return end
-    for _,v in pairs(workspace:GetDescendants()) do
+    for _,v in pairs(workspace:GetDescendants())do
         if IsTrackable(v) and not IsMine(v) then
             if (v.Position-lockedTarget.Position).Magnitude<350 then
                 local dir=(lockedTarget.Position-v.Position).Unit
@@ -644,6 +714,67 @@ local function UpdateGreenLine(target)
     GreenLine.Rotation=math.deg(math.atan2(dy,dx))
     GreenLine.Visible=true
 end
+local function UpdateHeadDisplay()
+    for i=#headList,1,-1 do
+        local item=headList[i]
+        if item.bg and item.bg.Parent then
+            local hum=item.char and item.char:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health<=0 then
+                item.bg:Destroy()
+                table.remove(headList,i)
+            end
+        else
+            table.remove(headList,i)
+        end
+    end
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if h and h.Health>0 then
+                local head=p.Character:FindFirstChild("Head")
+                if head then
+                    local has=false
+                    for _,item in pairs(headList)do
+                        if item.char==p.Character then has=true break end
+                    end
+                    if not has then
+                        local bg=Instance.new("BillboardGui")
+                        bg.Name="_headDisplay"
+                        bg.Size=UDim2.new(0,200,0,30)
+                        bg.Adornee=head
+                        bg.StudsOffsetWorldSpace=Vector3.new(0,2.5,0)
+                        bg.AlwaysOnTop=true
+                        bg.LightInfluence=0
+                        bg.MaxDistance=500
+                        bg.Parent=head
+                        local tl=Instance.new("TextLabel")
+                        tl.Size=UDim2.new(1,0,1,0)
+                        tl.BackgroundTransparency=1
+                        tl.TextColor3=Color3.fromRGB(0,255,255)
+                        tl.Font=Enum.Font.GothamBold
+                        tl.TextSize=12
+                        tl.TextStrokeTransparency=0
+                        tl.TextStrokeColor3=Color3.fromRGB(0,0,0)
+                        tl.Text=p.Name.." [0m]"
+                        tl.Parent=bg
+                        table.insert(headList,{char=p.Character,bg=bg,label=tl})
+                    end
+                end
+            end
+        end
+    end
+    local r=GetRoot()
+    if not r then return end
+    for _,item in pairs(headList)do
+        if item.label and item.char then
+            local hrp=item.char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist=(r.Position-hrp.Position).Magnitude
+                item.label.Text=item.char.Name.." ["..tostring(math.floor(dist)).."m]"
+            end
+        end
+    end
+end
 KeyBtn.MouseButton1Click:Connect(function()
     local key=KeyBox.Text
     local ok=false
@@ -657,12 +788,11 @@ end)
 
 B1.MouseButton1Click:Connect(function() CF.aim=not CF.aim B1.BackgroundColor3=CF.aim and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
 B2.MouseButton1Click:Connect(function() CF.esp=not CF.esp B2.BackgroundColor3=CF.esp and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-B3.MouseButton1Click:Connect(function() SpeedCfg.enabled=not SpeedCfg.enabled B3.BackgroundColor3=SpeedCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) ApplySpeed() end)
+B3.MouseButton1Click:Connect(function() SpeedCfg.enabled=not SpeedCfg.enabled B3.BackgroundColor3=SpeedCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
 B4.MouseButton1Click:Connect(function()
     WallCfg.enabled=not WallCfg.enabled
     B4.BackgroundColor3=WallCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
     if WallCfg.enabled then local r=GetRoot() if r then WallCfg.lockedY=r.Position.Y end else WallCfg.lockedY=nil end
-    ApplyWall()
 end)
 B5.MouseButton1Click:Connect(function()
     CF.bt=not CF.bt
@@ -670,17 +800,22 @@ B5.MouseButton1Click:Connect(function()
     AimRing.Visible=CF.bt
     if not CF.bt then GreenLine.Visible=false lockedTarget=nil end
 end)
-B6.MouseButton1Click:Connect(function() CF.jump=not CF.jump B6.BackgroundColor3=CF.jump and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) ApplyJump() end)
+B6.MouseButton1Click:Connect(function() CF.jump=not CF.jump B6.BackgroundColor3=CF.jump and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
 B7.MouseButton1Click:Connect(function() CF.noFall=not CF.noFall B7.BackgroundColor3=CF.noFall and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180) end)
-SubBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value ApplySpeed() end)
-AddBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value ApplySpeed() end)
+B8.MouseButton1Click:Connect(function()
+    AimCfg.useRange=not AimCfg.useRange
+    B8.BackgroundColor3=AimCfg.useRange and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    B8.Text=AimCfg.useRange and "范围:开" or "范围:关"
+end)
+SubBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value end)
+AddBtn.MouseButton1Click:Connect(function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) SpeedLabel.Text="速度: "..SpeedCfg.value end)
 RgSub.MouseButton1Click:Connect(function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) RangeLabel.Text="范围: "..AimCfg.range end)
 RgAdd.MouseButton1Click:Connect(function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) RangeLabel.Text="范围: "..AimCfg.range end)
 local Ball=Instance.new("TextButton")
 Ball.Size=UDim2.new(0,44,0,44)
 Ball.Position=UDim2.new(1,-60,1,-60)
 Ball.BackgroundColor3=Color3.fromRGB(255,182,193)
-Ball.Text="快射🥵🥵"
+Ball.Text="🥵快射🥵"
 Ball.TextColor3=Color3.fromRGB(255,255,255)
 Ball.Font=Enum.Font.GothamBold
 Ball.TextSize=16
@@ -708,11 +843,11 @@ Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false 
 RunService.RenderStepped:Connect(function()
     local cam=workspace.CurrentCamera
     if not cam then return end
-    
     if CF.aim then ApplyAim() end
     if CF.esp then ApplyESP() end
     if SpeedCfg.enabled then ApplySpeed() end
     if CF.jump then ApplyJump() end
+    if CF.noFall then ApplyNoFall() end
     if WallCfg.enabled then
         ApplyWall()
         if WallCfg.lockedY then
@@ -725,21 +860,12 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-    if CF.noFall then
-        local h=GetHum()
-        if h then
-            pcall(function()
-                h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
-                h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
-                if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
-            end)
-        end
-    end
     if CF.bt then
         local rt=GetRingTarget()
         if rt then lockedTarget=rt UpdateGreenLine(rt) else lockedTarget=nil GreenLine.Visible=false end
         Track()
     end
+    UpdateHeadDisplay()
 end)
 
-print("樱の辅助 V9 加载完成 - 全功能多重验证")
+print("樱の辅助 V10 加载完成 - 全功能多重验证")
