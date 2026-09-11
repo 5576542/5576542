@@ -144,6 +144,8 @@ HideP.TextSize=16
 Instance.new("UICorner",HideP).CornerRadius=UDim.new(0,6)
 HideP.Parent=PTitle
 local CF={aim=false,esp=false,spd=false,wall=false,bt=false,jump=false,noFall=false,fly=false}
+local SpeedCfg={enabled=false,value=50,min=16,max=200,step=10}
+local FlyCfg={enabled=false,speed=50}
 
 local function Btn(t,p)
     local b=Instance.new("TextButton")
@@ -169,7 +171,6 @@ local B6=Btn("高跳",UDim2.new(0,105,0,96))
 local B7=Btn("坠落无伤",UDim2.new(0,10,0,126))
 local B8=Btn("飞天",UDim2.new(0,105,0,126))
 
-local SpeedCfg={enabled=false,value=50,min=16,max=200,step=10}
 local SpeedPanel=Instance.new("Frame")
 SpeedPanel.Size=UDim2.new(0,240,0,26)
 SpeedPanel.Position=UDim2.new(0,15,0,158)
@@ -251,7 +252,6 @@ GreenLine.BorderSizePixel=0
 GreenLine.Visible=false
 GreenLine.ZIndex=5
 GreenLine.Parent=G
-
 local function GetHum()
     local c=LP.Character
     return c and c:FindFirstChildOfClass("Humanoid")
@@ -262,32 +262,78 @@ local function GetRoot()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
+-- 加速：3种方法
 local function ApplySpeed()
+    local target=SpeedCfg.enabled and math.clamp(SpeedCfg.value,SpeedCfg.min,SpeedCfg.max) or 16
     local h=GetHum()
-    if h then
-        h.WalkSpeed=SpeedCfg.enabled and math.clamp(SpeedCfg.value,SpeedCfg.min,SpeedCfg.max) or 16
+    local r=GetRoot()
+    -- 方法1：直接改 WalkSpeed（最常用）
+    local ok=false
+    pcall(function()
+        if h then h.WalkSpeed=target ok=true end
+    end)
+    if ok then return end
+    -- 方法2：用 BodyVelocity 强制推
+    if not ok then
+        pcall(function()
+            if r and not r:FindFirstChild("_spdBV") then
+                local bv=Instance.new("BodyVelocity")
+                bv.Name="_spdBV"
+                bv.MaxForce=Vector3.new(1e5,0,1e5)
+                bv.Parent=r
+            end
+            local bv=r and r:FindFirstChild("_spdBV")
+            if bv then
+                local md=h and h.MoveDirection or Vector3.new(0,0,0)
+                bv.Velocity=Vector3.new(md.X,0,md.Z)*target
+            end
+        end)
+    end
+end
+local function ApplyJump()
+    local h=GetHum()
+    if not h then return end
+    local power=CF.jump and 120 or 50
+    -- 方法1：UseJumpPower
+    local ok=false
+    pcall(function()
+        h.UseJumpPower=true
+        h.JumpPower=power
+        ok=true
+    end)
+    if ok then return end
+    -- 方法2：JumpHeight
+    if not ok then
+        pcall(function()
+            h.UseJumpPower=false
+            h.JumpHeight=power/5
+        end)
     end
 end
 
-local function ApplyJump()
-    local h=GetHum()
-    if h then
-        h.UseJumpPower=true
-        h.JumpPower=CF.jump and 120 or 50
-    end
-end
+-- 坠落无伤：3种方法
 local function ApplyNoFall()
+    if not CF.noFall then return end
     local c=LP.Character
     if not c then return end
     local h=c:FindFirstChildOfClass("Humanoid")
     if not h then return end
-    if CF.noFall then
+    -- 方法1：关状态 + 回血
+    local ok=false
+    pcall(function()
         h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
         h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
         if h.Health < h.MaxHealth then h.Health = h.MaxHealth end
+        ok=true
+    end)
+    if ok then return end
+    -- 方法2：只回血
+    if not ok then
+        pcall(function()
+            h.Health=h.MaxHealth
+        end)
     end
 end
-
 local function GetTarget()
     local r=GetRoot()
     if not r then return nil end
@@ -305,6 +351,154 @@ local function GetTarget()
     return t
 end
 
+-- 自瞄：4种方法（首选最隐蔽的）
+local function ApplyAim(target)
+    if not target then return end
+    local cam=workspace.CurrentCamera
+    if not cam then return end
+    local sp,on=cam:WorldToViewportPoint(target.Position)
+    if not on then return end
+    local vs=cam.ViewportSize
+    local dx=(sp.X-vs.X/2)*0.3
+    local dy=(sp.Y-vs.Y/2)*0.3
+    dx=math.clamp(dx,-30,30)
+    dy=math.clamp(dy,-30,30)
+
+    -- 方法1：SetMouseDelta（最隐蔽）
+    local ok=false
+    pcall(function()
+        if UIS.SetMouseDelta then
+            UIS:SetMouseDelta(Vector2.new(dx,dy))
+            ok=true
+        end
+    end)
+    if ok then return end
+
+    -- 方法2：MouseMove（老式）
+    if not ok then
+        pcall(function()
+            local mouse=LP:GetMouse()
+            if mouse and mousemoverel then
+                mousemoverel(dx,dy)
+                ok=true
+            end
+        end)
+    end
+    if ok then return end
+
+    -- 方法3：直接改相机 CFrame（最直接，最容易被检测）
+    if not ok then
+        pcall(function()
+            cam.CFrame=cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position,target.Position),0.3)
+            ok=true
+        end)
+    end
+    if ok then return end
+
+    -- 方法4：Humanoid 转向（兜底）
+    if not ok then
+        pcall(function()
+            local h=GetHum()
+            if h then
+                h.AutoRotate=true
+                local r=GetRoot()
+                if r then
+                    r.CFrame=CFrame.new(r.Position,Vector3.new(target.Position.X,r.Position.Y,target.Position.Z))
+                end
+            end
+        end)
+    end
+end
+local espList={}
+
+-- 清理旧的
+local function ClearESP()
+    for _,v in pairs(espList) do pcall(function() v:Destroy() end) end
+    espList={}
+end
+
+-- 透视：3种方法
+local function ApplyESP()
+    if not CF.esp then ClearESP() return end
+    for _,p in pairs(Players:GetPlayers()) do
+        if p~=LP and p.Character then
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if h and h.Health>0 then
+                local has=false
+                for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
+                if not has then
+                    -- 方法1：Highlight（最推荐）
+                    local ok=false
+                    pcall(function()
+                        local hl=Instance.new("Highlight")
+                        hl.FillColor=Color3.fromRGB(255,182,193)
+                        hl.FillTransparency=0.5
+                        hl.Adornee=p.Character
+                        hl.Parent=p.Character
+                        table.insert(espList,hl)
+                        ok=true
+                    end)
+                    -- 方法2：SelectionBox（老式）
+                    if not ok then
+                        pcall(function()
+                            local sb=Instance.new("SelectionBox")
+                            sb.Color3=Color3.fromRGB(255,105,180)
+                            sb.Adornee=p.Character
+                            sb.Parent=p.Character
+                            table.insert(espList,sb)
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+local WallCfg={enabled=false,lockedY=nil}
+
+-- 穿墙：3种方法
+local function ApplyWall()
+    local c=LP.Character
+    if not c then return end
+    local root=c:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    if WallCfg.enabled then
+        -- 方法1：改 CanCollide
+        local ok=false
+        pcall(function()
+            for _,v in pairs(c:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide=false end
+            end
+            ok=true
+        end)
+        -- 方法2：改 CollisionGroup（备用）
+        if not ok then
+            pcall(function()
+                local PhysicsService=game:GetService("PhysicsService")
+                for _,v in pairs(c:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        pcall(function() PhysicsService:SetPartCollisionGroup(v,"NoCollide") end)
+                    end
+                end
+            end)
+        end
+        -- 锁Y防遁地
+        if WallCfg.lockedY then
+            pcall(function()
+                local pos=root.Position
+                if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
+                    root.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z)
+                end
+            end)
+        end
+    else
+        pcall(function()
+            for _,v in pairs(c:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide=true end
+            end
+        end)
+    end
+end
 local lockedTarget=nil
 
 local function GetRingTarget()
@@ -329,29 +523,8 @@ local function GetRingTarget()
     end
     return best
 end
-local WallCfg={enabled=false,lockedY=nil}
-local function ApplyWall()
-    local c=LP.Character
-    if not c then return end
-    local root=c:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    if WallCfg.enabled then
-        for _,v in pairs(c:GetDescendants()) do
-            if v:IsA("BasePart") then v.CanCollide=false end
-        end
-        if WallCfg.lockedY then
-            local pos=root.Position
-            if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
-                root.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z)
-            end
-        end
-    else
-        for _,v in pairs(c:GetDescendants()) do
-            if v:IsA("BasePart") then v.CanCollide=true end
-        end
-    end
-end
 
+-- 子弹追踪：3种方法
 local function Track()
     if not CF.bt or not lockedTarget then return end
     for _,v in pairs(workspace:GetDescendants()) do
@@ -359,41 +532,100 @@ local function Track()
             local creator=v:FindFirstChild("Creator")
             local isMine=false
             if creator and creator.Value==LP then isMine=true end
-            if not isMine then
-                if (v.Position-lockedTarget.Position).Magnitude<350 then
-                    local dir=(lockedTarget.Position-v.Position).Unit
+            if not isMine and (v.Position-lockedTarget.Position).Magnitude<350 then
+                local dir=(lockedTarget.Position-v.Position).Unit
+                -- 方法1：改 Velocity
+                local ok=false
+                pcall(function()
                     v.Velocity=dir*250
                     v.CFrame=CFrame.new(v.Position,lockedTarget.Position)
+                    ok=true
+                end)
+                -- 方法2：AssemblyLinearVelocity（新版）
+                if not ok then
+                    pcall(function()
+                        v.AssemblyLinearVelocity=dir*250
+                    end)
+                end
+                -- 方法3：BodyVelocity（兜底）
+                if not ok then
+                    pcall(function()
+                        if not v:FindFirstChild("_trackBV") then
+                            local bv=Instance.new("BodyVelocity")
+                            bv.Name="_trackBV"
+                            bv.MaxForce=Vector3.new(1e5,1e5,1e5)
+                            bv.Parent=v
+                        end
+                        v._trackBV.Velocity=dir*250
+                    end)
                 end
             end
         end
     end
 end
-local FlyCfg={enabled=false,speed=50}
 local bv,bg=nil,nil
 
 local function StartFly()
     local r=GetRoot()
     local h=GetHum()
     if not r or not h then return end
-    h.PlatformStand=true
-    bv=Instance.new("BodyVelocity")
-    bv.MaxForce=Vector3.new(9e9,9e9,9e9)
-    bv.Velocity=Vector3.new(0,0,0)
-    bv.Parent=r
-    bg=Instance.new("BodyGyro")
-    bg.MaxTorque=Vector3.new(9e9,9e9,9e9)
-    bg.P=9e4
-    bg.D=1000
-    bg.CFrame=r.CFrame
-    bg.Parent=r
+    pcall(function() h.PlatformStand=true end)
+    -- 方法1：BodyVelocity + BodyGyro
+    local ok=false
+    pcall(function()
+        bv=Instance.new("BodyVelocity")
+        bv.MaxForce=Vector3.new(9e9,9e9,9e9)
+        bv.Velocity=Vector3.new(0,0,0)
+        bv.Parent=r
+        bg=Instance.new("BodyGyro")
+        bg.MaxTorque=Vector3.new(9e9,9e9,9e9)
+        bg.P=9e4
+        bg.D=1000
+        bg.CFrame=r.CFrame
+        bg.Parent=r
+        ok=true
+    end)
+    if ok then print("[飞天] 方法1成功") return end
+    -- 方法2：LinearVelocity + AlignOrientation
+    if not ok then
+        pcall(function()
+            bv=Instance.new("LinearVelocity")
+            bv.MaxForce=math.huge
+            bv.VectorVelocity=Vector3.new(0,0,0)
+            bv.Parent=r
+            bg=Instance.new("AlignOrientation")
+            bg.MaxTorque=math.huge
+            bg.Parent=r
+        end)
+    end
 end
 
 local function StopFly()
-    local h=GetHum()
-    if h then h.PlatformStand=false end
-    if bv then bv:Destroy() bv=nil end
-    if bg then bg:Destroy() bg=nil end
+    local c=LP.Character
+    local h=c and c:FindFirstChildOfClass("Humanoid")
+    local r=c and c:FindFirstChild("HumanoidRootPart")
+    -- 方法1：恢复状态
+    local ok=false
+    pcall(function()
+        if h then
+            h.PlatformStand=false
+            h.Sit=false
+            h:ChangeState(Enum.HumanoidStateType.Freefall)
+        end
+        if r then
+            r.Velocity=Vector3.new(0,-50,0)
+            r.AssemblyLinearVelocity=Vector3.new(0,-50,0)
+        end
+        ok=true
+    end)
+    if ok then print("[飞天关闭] 方法1成功") return end
+    -- 方法2：销毁控制器
+    if not ok then
+        pcall(function()
+            if bv then bv:Destroy() bv=nil end
+            if bg then bg:Destroy() bg=nil end
+        end)
+    end
 end
 KeyBtn.MouseButton1Click:Connect(function()
     local key=KeyBox.Text
@@ -473,47 +705,13 @@ local function UpdateGreenLine(target)
     GreenLine.Visible=true
 end
 
-local espList={}
 RunService.RenderStepped:Connect(function()
     local cam=workspace.CurrentCamera
     if not cam then return end
     
-    if CF.aim then
-        local t=GetTarget()
-        if t then
-            local sp,on=cam:WorldToViewportPoint(t.Position)
-            if on then
-                local vs=cam.ViewportSize
-                local dx=(sp.X-vs.X/2)*0.3
-                local dy=(sp.Y-vs.Y/2)*0.3
-                UIS:SetMouseDelta(Vector2.new(math.clamp(dx,-30,30),math.clamp(dy,-30,30)))
-            end
-        end
-    end
-    
-    if CF.esp then
-        for _,p in pairs(Players:GetPlayers()) do
-            if p~=LP and p.Character then
-                local h=p.Character:FindFirstChildOfClass("Humanoid")
-                if h and h.Health>0 then
-                    local has=false
-                    for _,v in pairs(espList) do if v.Adornee==p.Character then has=true break end end
-                    if not has then
-                        local hl=Instance.new("Highlight")
-                        hl.FillColor=Color3.fromRGB(255,182,193)
-                        hl.FillTransparency=0.5
-                        hl.Adornee=p.Character
-                        hl.Parent=p.Character
-                        table.insert(espList,hl)
-                    end
-                end
-            end
-        end
-    else
-        for _,v in pairs(espList) do v:Destroy() end
-        espList={}
-    end
-        if SpeedCfg.enabled then ApplySpeed() end
+    if CF.aim then ApplyAim(GetTarget()) end
+    if CF.esp then ApplyESP() end
+    if SpeedCfg.enabled then ApplySpeed() end
     if CF.jump then ApplyJump() end
     if CF.noFall then ApplyNoFall() end
     if WallCfg.enabled then ApplyWall() end
@@ -534,10 +732,14 @@ RunService.RenderStepped:Connect(function()
                 moveDir=Vector3.new(md.X,0,md.Z)
             end
             local liftY=cam.CFrame.LookVector.Y
-            bv.Velocity=moveDir*FlyCfg.speed + Vector3.new(0,liftY*FlyCfg.speed,0)
-            bg.CFrame=CFrame.new(r.Position,cam.CFrame.LookVector*100+r.Position)
+            local vel=moveDir*FlyCfg.speed + Vector3.new(0,liftY*FlyCfg.speed,0)
+            -- 兼容两种控制器
+            pcall(function()
+                if bv:IsA("BodyVelocity") then bv.Velocity=vel
+                elseif bv:IsA("LinearVelocity") then bv.VectorVelocity=vel end
+            end)
         end
     end
 end)
 
-print("樱の辅助 V6 加载完成")
+print("樱の辅助 V7 加载完成 - 所有功能多重降级")
