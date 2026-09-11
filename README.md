@@ -27,24 +27,17 @@ local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
 
--- ==================== 模块化注册系统 ====================
-local Features={}      -- 所有功能注册表
-local FeatureState={}   -- 功能开关状态
-
--- 注册功能（后续添加只需调用这个）
-function RegisterFeature(key,config)
-    Features[key]=config
+local Features={}
+local FeatureState={}
+function RegisterFeature(key,cfg)
+    Features[key]=cfg or {}
     FeatureState[key]=false
 end
-
--- 统一开关（按钮调用）
 function ToggleFeature(key)
     if not Features[key] then return false end
     FeatureState[key]=not FeatureState[key]
     return FeatureState[key]
 end
-
--- 执行所有已开启的功能
 function RunAllFeatures(dt)
     for key,cfg in pairs(Features) do
         if FeatureState[key] and cfg.run then
@@ -80,6 +73,7 @@ Title.TextColor3=Color3.fromRGB(255,105,180)
 Title.Font=Enum.Font.GothamBold
 Title.TextSize=26
 Title.Parent=Main
+
 local KeyBox=Instance.new("TextBox")
 KeyBox.Size=UDim2.new(0,280,0,40)
 KeyBox.Position=UDim2.new(0.5,-140,0,110)
@@ -122,8 +116,8 @@ KeyBtn.TextSize=16
 KeyBtn.Parent=Main
 Instance.new("UICorner",KeyBtn).CornerRadius=UDim.new(0,12)
 local Panel=Instance.new("Frame")
-Panel.Size=UDim2.new(0,280,0,360)
-Panel.Position=UDim2.new(0.5,-140,0.5,-180)
+Panel.Size=UDim2.new(0,280,0,420)
+Panel.Position=UDim2.new(0.5,-140,0.5,-210)
 Panel.BackgroundColor3=Color3.fromRGB(255,240,245)
 Panel.BackgroundTransparency=0.05
 Panel.Active=true
@@ -169,24 +163,16 @@ HideP.Font=Enum.Font.GothamBold
 HideP.TextSize=16
 Instance.new("UICorner",HideP).CornerRadius=UDim.new(0,6)
 HideP.Parent=PTitle
-local BTNS={}  -- 所有按钮
-local BTN_POS={
-    {0,10,0,36},{0,105,0,36},
-    {0,10,0,66},{0,105,0,66},
-    {0,10,0,96},{0,105,0,96},
-    {0,10,0,126},{0,105,0,126},
-    {0,10,0,156},{0,105,0,156},
-    {0,10,0,186},{0,105,0,186}
-}
-local BTN_INDEX=1
 
+local BTNS={}
+local BTN_INDEX=0
 local function Btn(t)
-    if BTN_INDEX>#BTN_POS then return nil end
-    local p=BTN_POS[BTN_INDEX]
+    local col=BTN_INDEX%2
+    local row=math.floor(BTN_INDEX/2)
     BTN_INDEX=BTN_INDEX+1
     local b=Instance.new("TextButton")
     b.Size=UDim2.new(0,80,0,24)
-    b.Position=UDim2.new(p[1],p[2],p[3],p[4])
+    b.Position=UDim2.new(0,(col==0 and 10 or 105),0,36+row*30)
     b.BackgroundTransparency=0.25
     b.BackgroundColor3=Color3.fromRGB(255,105,180)
     b.Text=t
@@ -198,7 +184,14 @@ local function Btn(t)
     table.insert(BTNS,b)
     return b
 end
+local SpeedCfg={value=50,min=16,max=200,step=10}
+local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
+local HitboxCfg={scale=3,step=0.5,min=1,max=10}
+local WallCfg={lockedY=nil,method=0}
+local GameEnv={speedMethod="WalkSpeed",speedHooked=nil}
+local kickLog={}
 
+-- 按钮创建
 local B1=Btn("自瞄")
 local B2=Btn("透视")
 local B3=Btn("加速")
@@ -209,17 +202,17 @@ local B7=Btn("坠落无伤")
 local B8=Btn("范围:开")
 local B9=Btn("防踢:关")
 local B10=Btn("头顶显示")
-local SpeedCfg={value=50,min=16,max=200,step=10}
-local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
-local WallCfg={lockedY=nil,method=0}
-local GameEnv={speedMethod="WalkSpeed"}
-local AntiKickCfg={enabled=false}
-local kickLog={}
+local B11=Btn("秒交互")
+local B12=Btn("无后摇")
+local B13=Btn("扩大碰撞")
+
+-- 计算面板底部位置
+local panelBottom=36+math.ceil(BTN_INDEX/2)*30
 
 -- 速度面板
 local SpeedPanel=Instance.new("Frame")
 SpeedPanel.Size=UDim2.new(0,240,0,26)
-SpeedPanel.Position=UDim2.new(0,15,0,216)
+SpeedPanel.Position=UDim2.new(0,15,0,panelBottom+5)
 SpeedPanel.BackgroundTransparency=1
 SpeedPanel.Parent=Panel
 
@@ -258,7 +251,7 @@ Instance.new("UICorner",AddBtn).CornerRadius=UDim.new(0,6)
 AddBtn.Parent=SpeedPanel
 local RangePanel=Instance.new("Frame")
 RangePanel.Size=UDim2.new(0,240,0,26)
-RangePanel.Position=UDim2.new(0,15,0,244)
+RangePanel.Position=UDim2.new(0,15,0,panelBottom+33)
 RangePanel.BackgroundTransparency=1
 RangePanel.Parent=Panel
 
@@ -296,6 +289,47 @@ RgAdd.TextSize=14
 Instance.new("UICorner",RgAdd).CornerRadius=UDim.new(0,6)
 RgAdd.Parent=RangePanel
 
+local HitboxPanel=Instance.new("Frame")
+HitboxPanel.Size=UDim2.new(0,240,0,26)
+HitboxPanel.Position=UDim2.new(0,15,0,panelBottom+61)
+HitboxPanel.BackgroundTransparency=1
+HitboxPanel.Parent=Panel
+
+local HbSub=Instance.new("TextButton")
+HbSub.Size=UDim2.new(0,28,0,22)
+HbSub.Position=UDim2.new(0,0,0,2)
+HbSub.BackgroundColor3=Color3.fromRGB(255,182,193)
+HbSub.Text="-"
+HbSub.TextColor3=Color3.fromRGB(255,255,255)
+HbSub.Font=Enum.Font.GothamBold
+HbSub.TextSize=14
+Instance.new("UICorner",HbSub).CornerRadius=UDim.new(0,6)
+HbSub.Parent=HitboxPanel
+
+local HitboxLabel=Instance.new("TextLabel")
+HitboxLabel.Size=UDim2.new(0,140,0,22)
+HitboxLabel.Position=UDim2.new(0,32,0,2)
+HitboxLabel.BackgroundColor3=Color3.fromRGB(255,255,255)
+HitboxLabel.BackgroundTransparency=0.2
+HitboxLabel.Text="碰撞: x3"
+HitboxLabel.TextColor3=Color3.fromRGB(255,105,180)
+HitboxLabel.Font=Enum.Font.Gotham
+HitboxLabel.TextSize=11
+Instance.new("UICorner",HitboxLabel).CornerRadius=UDim.new(0,6)
+HitboxLabel.Parent=HitboxPanel
+
+local HbAdd=Instance.new("TextButton")
+HbAdd.Size=UDim2.new(0,28,0,22)
+HbAdd.Position=UDim2.new(0,176,0,2)
+HbAdd.BackgroundColor3=Color3.fromRGB(221,160,221)
+HbAdd.Text="+"
+HbAdd.TextColor3=Color3.fromRGB(255,255,255)
+HbAdd.Font=Enum.Font.GothamBold
+HbAdd.TextSize=14
+Instance.new("UICorner",HbAdd).CornerRadius=UDim.new(0,6)
+HbAdd.Parent=HitboxPanel
+
+-- 红圈 + 绿线
 local AimRing=Instance.new("Frame")
 AimRing.Size=UDim2.new(0,200,0,200)
 AimRing.Position=UDim2.new(0.5,-100,0.5,-100)
@@ -377,7 +411,7 @@ RegisterFeature("speed",{
         local h=GetHum()
         if not h then return end
         pcall(function() h.WalkSpeed=SpeedCfg.value end)
-        if not GameEnv.speedHooked or GameEnv.speedHooked~=h then
+        if GameEnv.speedHooked~=h then
             GameEnv.speedHooked=h
             pcall(function()
                 h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
@@ -440,6 +474,7 @@ RegisterFeature("wall",{
         WallCfg.lockedY=nil
     end
 })
+
 local espList={}
 RegisterFeature("esp",{
     run=function()
@@ -468,6 +503,7 @@ RegisterFeature("esp",{
         espList={}
     end
 })
+
 RegisterFeature("aim",{
     run=function()
         local target=GetTarget()
@@ -480,7 +516,6 @@ RegisterFeature("aim",{
     end
 })
 local headList={}
-
 local function IsMine(obj)
     local creator=obj:FindFirstChild("Creator")
     if creator and creator.Value==LP then return true end
@@ -516,13 +551,7 @@ end
 RegisterFeature("bt",{
     run=function()
         local rt=GetRingTarget()
-        if rt then
-            lockedTarget=rt
-            UpdateGreenLine(rt)
-        else
-            lockedTarget=nil
-            GreenLine.Visible=false
-        end
+        if rt then lockedTarget=rt UpdateGreenLine(rt) else lockedTarget=nil GreenLine.Visible=false end
         if not lockedTarget then return end
         for _,v in pairs(workspace:GetDescendants())do
             if IsTrackable(v) and not IsMine(v) then
@@ -612,10 +641,9 @@ RegisterFeature("head",{
         headList={}
     end
 })
-local antiKickLoop=nil
 
+local antiKickLoop=nil
 RegisterFeature("antiKick",{
-    run=nil,  -- 防踢不需要每帧执行
     onEnable=function()
         pcall(function()
             LP.Kick=function(self,msg)
@@ -657,7 +685,110 @@ RegisterFeature("antiKick",{
         print("[防踢] 已关闭")
     end
 })
--- 统一开关处理器
+RegisterFeature("fastInteract",{})
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if FeatureState.fastInteract then
+            pcall(function()
+                for _,v in pairs(workspace:GetDescendants())do
+                    if v:IsA("ProximityPrompt")then
+                        v.HoldDuration=0
+                        v.MaxActivationDistance=200
+                        v.RequiresLineOfSight=false
+                    end
+                    if v:IsA("ClickDetector")then
+                        v.MaxActivationDistance=200
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+RegisterFeature("noCooldown",{})
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if FeatureState.noCooldown then
+            pcall(function()
+                local c=LP.Character
+                if c then
+                    for _,tool in pairs(c:GetChildren())do
+                        if tool:IsA("Tool")then
+                            for _,v in pairs(tool:GetDescendants())do
+                                if v:IsA("NumberValue")then
+                                    local n=v.Name:lower()
+                                    if n:find("cooldown")or n:find("delay")or n:find("reload")or n:find("rate")then
+                                        v.Value=0
+                                    end
+                                end
+                            end
+                            for _,v in pairs(tool:GetDescendants())do
+                                if v:IsA("Animation")then
+                                    pcall(function() v:Destroy() end)
+                                end
+                            end
+                        end
+                    end
+                end
+                for _,tool in pairs(LP.Backpack:GetChildren())do
+                    if tool:IsA("Tool")then
+                        for _,v in pairs(tool:GetDescendants())do
+                            if v:IsA("NumberValue")then
+                                local n=v.Name:lower()
+                                if n:find("cooldown")or n:find("delay")or n:find("reload")then
+                                    v.Value=0
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+local HitboxCache={}
+local function ApplyHitbox()
+    for part,_ in pairs(HitboxCache)do
+        if not part or not part.Parent then HitboxCache[part]=nil end
+    end
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if h and h.Health>0 then
+                for _,v in pairs(p.Character:GetDescendants())do
+                    if v:IsA("BasePart")then
+                        if not HitboxCache[v]then HitboxCache[v]=v.Size end
+                        local newSize=HitboxCache[v]*HitboxCfg.scale
+                        if v.Size~=newSize then
+                            pcall(function()
+                                v.Size=newSize
+                                v.CanQuery=true
+                                v.CanTouch=true
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function RestoreHitbox()
+    for part,origSize in pairs(HitboxCache)do
+        pcall(function()
+            if part and part.Parent then part.Size=origSize end
+        end)
+    end
+    HitboxCache={}
+end
+
+RegisterFeature("hitbox",{
+    run=function() ApplyHitbox() end,
+    onDisable=function() RestoreHitbox() end
+})
 local function HandleToggle(key,btn,onText,offText)
     local on=ToggleFeature(key)
     btn.BackgroundColor3=on and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
@@ -671,7 +802,6 @@ local function HandleToggle(key,btn,onText,offText)
     end
 end
 
--- 绑定按钮
 B1.MouseButton1Click:Connect(function() HandleToggle("aim",B1) end)
 B2.MouseButton1Click:Connect(function() HandleToggle("esp",B2) end)
 B3.MouseButton1Click:Connect(function() HandleToggle("speed",B3) end)
@@ -695,6 +825,10 @@ B8.MouseButton1Click:Connect(function()
 end)
 B9.MouseButton1Click:Connect(function() HandleToggle("antiKick",B9,"防踢:开","防踢:关") end)
 B10.MouseButton1Click:Connect(function() HandleToggle("head",B10) end)
+B11.MouseButton1Click:Connect(function() HandleToggle("fastInteract",B11) end)
+B12.MouseButton1Click:Connect(function() HandleToggle("noCooldown",B12) end)
+B13.MouseButton1Click:Connect(function() HandleToggle("hitbox",B13) end)
+
 SubBtn.MouseButton1Click:Connect(function()
     SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step)
     SpeedLabel.Text="速度: "..SpeedCfg.value
@@ -710,6 +844,14 @@ end)
 RgAdd.MouseButton1Click:Connect(function()
     AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step)
     RangeLabel.Text="范围: "..AimCfg.range
+end)
+HbSub.MouseButton1Click:Connect(function()
+    HitboxCfg.scale=math.max(HitboxCfg.min,HitboxCfg.scale-HitboxCfg.step)
+    HitboxLabel.Text="碰撞: x"..HitboxCfg.scale
+end)
+HbAdd.MouseButton1Click:Connect(function()
+    HitboxCfg.scale=math.min(HitboxCfg.max,HitboxCfg.scale+HitboxCfg.step)
+    HitboxLabel.Text="碰撞: x"..HitboxCfg.scale
 end)
 
 KeyBtn.MouseButton1Click:Connect(function()
@@ -727,9 +869,7 @@ UIS.InputBegan:Connect(function(input,gp)
     if not gp and input.KeyCode==Enum.KeyCode.F6 then
         print("[防踢] 拦截记录:")
         if #kickLog==0 then print("  (无记录)") else
-            for i,log in pairs(kickLog)do
-                print("  "..i..". "..(log.msg or ""))
-            end
+            for i,log in pairs(kickLog)do print("  "..i..". "..(log.msg or "")) end
         end
     end
 end)
@@ -762,6 +902,7 @@ Ball.InputEnded:Connect(function(i)
 end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
+
 task.spawn(function()
     task.wait(1)
     pcall(function()
@@ -778,26 +919,7 @@ task.spawn(function()
 end)
 
 RunService.RenderStepped:Connect(function(dt)
-    -- 遍历所有已开启的功能，统一执行
     RunAllFeatures(dt)
 end)
 
--- ==================== 后续添加功能示例 ====================
--- 想加新功能，只要注册 + 加按钮 + 绑定事件即可，不用改老代码：
---
--- RegisterFeature("fly",{
---     run=function()
---         -- 飞行的每帧逻辑
---     end,
---     onEnable=function()
---         -- 开启时执行一次
---     end,
---     onDisable=function()
---         -- 关闭时执行一次
---     end
--- })
--- local B11=Btn("飞天")
--- B11.MouseButton1Click:Connect(function() HandleToggle("fly",B11) end)
--- ====================
-
-print("樱の辅助 V11 加载完成 - 模块化注册系统")
+print("樱の辅助 V12 加载完成")
