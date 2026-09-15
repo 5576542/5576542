@@ -30,55 +30,29 @@ G.Parent=CG
 local DecryptCfg={decrypted=false,encrypted=false,autoDecrypt=true}
 
 local function ReadAccountSignature()
-    local sig={
-        userId=LP.UserId,
-        name=LP.Name,
-        displayName=LP.DisplayName,
-        accountAge=LP.AccountAge,
-        membershipType=tostring(LP.MembershipType),
-        hasVerified=LP.HasVerifiedBadge,
-        gameId=game.GameId,
-        placeId=game.PlaceId,
-        jobId=game.JobId
-    }
+    local sig={userId=LP.UserId,name=LP.Name,displayName=LP.DisplayName,accountAge=LP.AccountAge,membershipType=tostring(LP.MembershipType),hasVerified=LP.HasVerifiedBadge,gameId=game.GameId,placeId=game.PlaceId,jobId=game.JobId}
     local raw=tostring(sig.userId)..sig.name..tostring(sig.accountAge)..tostring(sig.gameId)
     local hash=0
-    for i=1,#raw do
-        hash=(hash*31+string.byte(raw,i))%2147483647
-    end
+    for i=1,#raw do hash=(hash*31+string.byte(raw,i))%2147483647 end
     sig.hash=hash
     sig.isEncrypted=(hash%2==0)
     return sig
 end
 
-local function ReadCharFlag()
+local function ReadFlags()
     local c=LP.Character
-    if not c then return false end
-    for _,v in pairs(c:GetChildren())do
-        local n=v.Name:lower()
-        if n:find("encrypt")or n:find("lock")or n:find("secure")or n:find("locked")then
-            if v:IsA("BoolValue")and v.Value then return true end
-            if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
+    if c then
+        for _,v in pairs(c:GetChildren())do
+            local n=v.Name:lower()
+            if n:find("encrypt")or n:find("lock")or n:find("secure")then
+                if v:IsA("BoolValue")and v.Value then return true end
+                if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
+            end
         end
     end
-    return false
-end
-
-local function ReadPlayerFlag()
     for _,v in pairs(LP:GetChildren())do
         local n=v.Name:lower()
         if n:find("encrypt")or n:find("lock")or n:find("secure")then
-            if v:IsA("BoolValue")and v.Value then return true end
-            if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
-        end
-    end
-    return false
-end
-
-local function ReadGlobalFlag()
-    for _,v in pairs(workspace:GetChildren())do
-        local n=v.Name:lower()
-        if n:find("encrypt")or n:find("security")then
             if v:IsA("BoolValue")and v.Value then return true end
         end
     end
@@ -87,12 +61,11 @@ end
 
 local function CheckEncrypted()
     local sig=ReadAccountSignature()
-    if ReadCharFlag()then return true,sig end
-    if ReadPlayerFlag()then return true,sig end
-    if ReadGlobalFlag()then return true,sig end
+    if ReadFlags()then return true,sig end
     if sig.isEncrypted then return true,sig end
     return false,sig
 end
+
 local StatusBar=Instance.new("Frame")
 StatusBar.Size=UDim2.new(0,240,0,32)
 StatusBar.Position=UDim2.new(0,10,0,10)
@@ -112,27 +85,17 @@ local StatusLabel=Instance.new("TextLabel")
 StatusLabel.Size=UDim2.new(1,-35,1,0)
 StatusLabel.Position=UDim2.new(0,28,0,0)
 StatusLabel.BackgroundTransparency=1
-StatusLabel.Text="🔍 正在检测账号状态..."
+StatusLabel.Text="🔍 检测中..."
 StatusLabel.TextColor3=Color3.fromRGB(200,200,220)
 StatusLabel.Font=Enum.Font.GothamBold
 StatusLabel.TextSize=10
 StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
 StatusLabel.Parent=StatusBar
-
-local decryptSteps={"读取账号签名...","比对属性哈希...","生成客户端密钥...","绑定会话...","解密完成"}
-
 local function DoDecrypt(sig)
-    task.spawn(function()
-        for i,step in ipairs(decryptSteps)do
-            StatusLabel.Text="⏳ "..step
-            StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
-            task.wait(0.15+sig.hash%3*0.05)
-        end
-        DecryptCfg.decrypted=true
-        StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
-        StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
-        StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
-    end)
+    DecryptCfg.decrypted=true
+    StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
+    StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
+    StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
 end
 
 task.spawn(function()
@@ -148,18 +111,17 @@ task.spawn(function()
                     StatusDot.BackgroundColor3=Color3.fromRGB(255,180,80)
                     DoDecrypt(sig)
                 else
-                    StatusLabel.Text="🔒 账号已加密 - 请手动解密"
+                    StatusLabel.Text="🔒 账号已加密"
                     StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
-                    StatusDot.BackgroundColor3=Color3.fromRGB(255,80,80)
                 end
             else
-                StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
+                StatusLabel.Text="✅ 已解密"
                 StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
                 StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
             end
         else
             DecryptCfg.decrypted=true
-            StatusLabel.Text="✅ 账号未加密 - 功能可用"
+            StatusLabel.Text="✅ 账号未加密"
             StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
             StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
         end
@@ -180,9 +142,7 @@ end
 function RunAllFeatures(dt)
     if not DecryptCfg.decrypted then return end
     for k,c in pairs(Features)do
-        if FeatureState[k] and c.run then
-            pcall(c.run,dt)
-        end
+        if FeatureState[k] and c.run then pcall(c.run,dt) end
     end
 end
 local Main=Instance.new("Frame")
@@ -327,7 +287,7 @@ end
 local SpeedCfg={value=50,min=16,max=200,step=10}
 local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
 local HitboxCfg={scale=3,step=0.5,min=1,max=10}
-local WallCfg={lockedY=nil,method=0}
+local WallCfg={lockedY=nil}
 local GameEnv={speedMethod="WalkSpeed",speedHooked=nil}
 
 local B1=Btn("自瞄")
@@ -390,7 +350,7 @@ AutoDecryptBtn.MouseButton1Click:Connect(function()
     AutoDecryptBtn.Text=DecryptCfg.autoDecrypt and "自动解密: 开" or "自动解密: 关"
 end)
 
-local function MakeSlider(name,yPos,getText,onSub,onAdd)
+local function MakeSlider(yPos,getText,onSub,onAdd)
     local p=Instance.new("Frame")
     p.Size=UDim2.new(0,240,0,26)
     p.Position=UDim2.new(0,15,0,yPos)
@@ -429,20 +389,19 @@ local function MakeSlider(name,yPos,getText,onSub,onAdd)
     add.Parent=p
     sub.MouseButton1Click:Connect(function() onSub() lb.Text=getText() end)
     add.MouseButton1Click:Connect(function() onAdd() lb.Text=getText() end)
-    return lb
 end
 
-MakeSlider("速度",panelBottom+70,
+MakeSlider(panelBottom+70,
     function() return "速度: "..SpeedCfg.value end,
     function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) end,
     function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) end
 )
-MakeSlider("范围",panelBottom+98,
+MakeSlider(panelBottom+98,
     function() return "范围: "..AimCfg.range end,
     function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) end,
     function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) end
 )
-MakeSlider("碰撞",panelBottom+126,
+MakeSlider(panelBottom+126,
     function() return "碰撞: x"..HitboxCfg.scale end,
     function() HitboxCfg.scale=math.max(HitboxCfg.min,HitboxCfg.scale-HitboxCfg.step) end,
     function() HitboxCfg.scale=math.min(HitboxCfg.max,HitboxCfg.scale+HitboxCfg.step) end
@@ -475,6 +434,8 @@ local function GetRoot()
     local c=LP.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
+
+-- 算法1：通用敌人识别（不依赖特定名字，用 Humanoid 判断）
 local function GetTarget()
     local r=GetRoot()
     if not r then return nil end
@@ -492,7 +453,8 @@ local function GetTarget()
     end
     return t
 end
-local lockedTarget=nil
+
+-- 算法2：红圈内锁定
 local function GetRingTarget()
     local cam=workspace.CurrentCamera
     if not cam then return nil end
@@ -521,32 +483,98 @@ local function GetRingTarget()
     end
     return best
 end
+local lockedTarget=nil
+-- 环境探测（算法判断游戏类型）
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local h=GetHum()
+        if h then
+            local old=h.WalkSpeed
+            pcall(function() h.WalkSpeed=100 end)
+            task.wait(0.1)
+            -- 算法：如果被游戏重置，说明有锁
+            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
+            pcall(function() h.WalkSpeed=old end)
+        end
+    end)
+end)
+
+local speedMethod=0
+local speedHooked=nil
+
+-- 算法方案1：直接改（最快的路径）
+local function SpeedAlgo1()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function() h.WalkSpeed=SpeedCfg.value end)
+    return math.abs(h.WalkSpeed-SpeedCfg.value)<2
+end
+
+-- 算法方案2：Hook 属性变化（游戏锁时用）
+local function SpeedAlgo2()
+    local h=GetHum()
+    if not h then return false end
+    if speedHooked~=h then
+        speedHooked=h
+        pcall(function()
+            h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+                if FeatureState.speed and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
+                    h.WalkSpeed=SpeedCfg.value
+                end
+            end)
+        end)
+    end
+    pcall(function() h.WalkSpeed=SpeedCfg.value end)
+    return true
+end
+
 RegisterFeature("speed",{
     run=function()
-        local h=GetHum()
-        if not h then return end
-        pcall(function() h.WalkSpeed=SpeedCfg.value end)
-        if GameEnv.speedHooked~=h then
-            GameEnv.speedHooked=h
-            pcall(function()
-                h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-                    if FeatureState.speed and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
-                        h.WalkSpeed=SpeedCfg.value
-                    end
-                end)
-            end)
+        if speedMethod==0 then
+            if GameEnv.speedMethod=="Hook" then speedMethod=2 else speedMethod=1 end
         end
+        if speedMethod==1 then SpeedAlgo1() return end
+        if speedMethod==2 then SpeedAlgo2() return end
+        if SpeedAlgo1() then speedMethod=1 return end
+        if SpeedAlgo2() then speedMethod=2 return end
+    end,
+    onDisable=function()
+        speedMethod=0
+        local h=GetHum()
+        if h then pcall(function() h.WalkSpeed=16 end) end
     end
 })
+-- 高跳算法：按顺序试
+local jumpMethod=0
+local function JumpAlgo1()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
+    return h.JumpPower and h.JumpPower>=100
+end
+local function JumpAlgo2()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function() h.UseJumpPower=false h.JumpHeight=30 end)
+    return h.JumpHeight and h.JumpHeight>=20
+end
 
 RegisterFeature("jump",{
     run=function()
+        if jumpMethod==1 then JumpAlgo1() return end
+        if jumpMethod==2 then JumpAlgo2() return end
+        if JumpAlgo1() then jumpMethod=1 return end
+        if JumpAlgo2() then jumpMethod=2 return end
+    end,
+    onDisable=function()
+        jumpMethod=0
         local h=GetHum()
-        if not h then return end
-        pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
+        if h then pcall(function() h.UseJumpPower=true h.JumpPower=50 end) end
     end
 })
 
+-- 坠落无伤算法
 RegisterFeature("noFall",{
     run=function()
         local h=GetHum()
@@ -558,17 +586,46 @@ RegisterFeature("noFall",{
         end)
     end
 })
+local wallMethod=0
+local wallBP=nil
+
+-- 算法方案1：改 CanCollide
+local function WallAlgo1()
+    local c=LP.Character
+    if not c then return false end
+    pcall(function()
+        for _,v in pairs(c:GetDescendants())do
+            if v:IsA("BasePart")then v.CanCollide=false end
+        end
+    end)
+    local r=c:FindFirstChild("HumanoidRootPart")
+    return r and r.CanCollide==false
+end
+
+-- 算法方案2：改 CollisionGroup
+local function WallAlgo2()
+    local c=LP.Character
+    if not c then return false end
+    pcall(function()
+        local PS=game:GetService("PhysicsService")
+        for _,v in pairs(c:GetDescendants())do
+            if v:IsA("BasePart")then
+                pcall(function() PS:SetPartCollisionGroup(v,"NoCollide") end)
+            end
+        end
+    end)
+    return true
+end
+
 RegisterFeature("wall",{
     run=function()
-        local c=LP.Character
-        if not c then return end
-        pcall(function()
-            for _,v in pairs(c:GetDescendants())do
-                if v:IsA("BasePart")then v.CanCollide=false end
-            end
-        end)
+        if wallMethod==1 then WallAlgo1() return end
+        if wallMethod==2 then WallAlgo2() return end
+        if WallAlgo1() then wallMethod=1 return end
+        if WallAlgo2() then wallMethod=2 return end
+        -- 锁Y防遁地
         if WallCfg.lockedY then
-            local r=c:FindFirstChild("HumanoidRootPart")
+            local r=GetRoot()
             if r then
                 local pos=r.Position
                 if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
@@ -578,6 +635,8 @@ RegisterFeature("wall",{
         end
     end,
     onDisable=function()
+        wallMethod=0
+        WallCfg.lockedY=nil
         local c=LP.Character
         if c then
             pcall(function()
@@ -586,46 +645,186 @@ RegisterFeature("wall",{
                 end
             end)
         end
-        WallCfg.lockedY=nil
     end
 })
-
 local espList={}
-RegisterFeature("esp",{
-    run=function()
-        for _,p in pairs(Players:GetPlayers())do
-            if p~=LP and p.Character then
-                local h=p.Character:FindFirstChildOfClass("Humanoid")
-                if h and h.Health>0 then
-                    local has=false
-                    for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-                    if not has then
-                        pcall(function()
-                            local hl=Instance.new("Highlight")
-                            hl.FillColor=Color3.fromRGB(255,182,193)
-                            hl.FillTransparency=0.5
-                            hl.Adornee=p.Character
-                            hl.Parent=p.Character
-                            table.insert(espList,hl)
-                        end)
-                    end
-                end
+local espMethod=0
+
+-- 算法：通用识别玩家（不依赖任何特定名）
+local function GetEnemies()
+    local list={}
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if h and h.Health>0 then
+                table.insert(list,p)
             end
         end
+    end
+    return list
+end
+
+-- 算法方案1：Highlight
+local function EspAlgo1()
+    for _,p in pairs(GetEnemies())do
+        local has=false
+        for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
+        if not has then
+            pcall(function()
+                local hl=Instance.new("Highlight")
+                hl.FillColor=Color3.fromRGB(255,182,193)
+                hl.FillTransparency=0.5
+                hl.Adornee=p.Character
+                hl.Parent=p.Character
+                table.insert(espList,hl)
+            end)
+        end
+    end
+    return #espList>0
+end
+
+-- 算法方案2：SelectionBox
+local function EspAlgo2()
+    for _,p in pairs(GetEnemies())do
+        local has=false
+        for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
+        if not has then
+            pcall(function()
+                local sb=Instance.new("SelectionBox")
+                sb.Color3=Color3.fromRGB(255,105,180)
+                sb.Adornee=p.Character
+                sb.Parent=p.Character
+                table.insert(espList,sb)
+            end)
+        end
+    end
+    return #espList>0
+end
+
+RegisterFeature("esp",{
+    run=function()
+        if espMethod==1 then EspAlgo1() return end
+        if espMethod==2 then EspAlgo2() return end
+        if EspAlgo1() then espMethod=1 return end
+        if EspAlgo2() then espMethod=2 return end
     end,
     onDisable=function()
+        espMethod=0
         for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
         espList={}
     end
 })
+local aimMethod=0
+
+-- 算法1：SetMouseDelta
+local function AimAlgo1(target)
+    local cam=workspace.CurrentCamera
+    if not cam or not UIS.SetMouseDelta then return false end
+    local ok=false
+    pcall(function()
+        local sp,on=cam:WorldToViewportPoint(target.Position)
+        if on then
+            local vs=cam.ViewportSize
+            local dx=math.clamp((sp.X-vs.X/2)*0.5,-80,80)
+            local dy=math.clamp((sp.Y-vs.Y/2)*0.5,-80,80)
+            UIS:SetMouseDelta(Vector2.new(dx,dy))
+            ok=true
+        end
+    end)
+    return ok
+end
+
+-- 算法2：mousemoverel
+local function AimAlgo2(target)
+    if not mousemoverel then return false end
+    local cam=workspace.CurrentCamera
+    if not cam then return false end
+    local ok=false
+    pcall(function()
+        local sp,on=cam:WorldToViewportPoint(target.Position)
+        if on then
+            local vs=cam.ViewportSize
+            mousemoverel((sp.X-vs.X/2)*0.5,(sp.Y-vs.Y/2)*0.5)
+            ok=true
+        end
+    end)
+    return ok
+end
+
+-- 算法3：Mouse.Move
+local function AimAlgo3(target)
+    local cam=workspace.CurrentCamera
+    if not cam then return false end
+    local ok=false
+    pcall(function()
+        local mouse=LP:GetMouse()
+        if mouse and mouse.Move then
+            local sp,on=cam:WorldToViewportPoint(target.Position)
+            if on then
+                local vs=cam.ViewportSize
+                mouse.Move(mouse.X+(sp.X-vs.X/2)*0.5,mouse.Y+(sp.Y-vs.Y/2)*0.5)
+                ok=true
+            end
+        end
+    end)
+    return ok
+end
+
+-- 算法4：Humanoid 转身
+local function AimAlgo4(target)
+    local c=LP.Character
+    if not c then return false end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    local r=c:FindFirstChild("HumanoidRootPart")
+    if not h or not r then return false end
+    local ok=false
+    pcall(function()
+        h.AutoRotate=false
+        r.CFrame=CFrame.new(r.Position,Vector3.new(target.Position.X,r.Position.Y,target.Position.Z))
+        ok=true
+    end)
+    return ok
+end
+
+-- 算法5：VirtualInputManager
+local function AimAlgo5(target)
+    local VIM=game:GetService("VirtualInputManager")
+    if not VIM then return false end
+    local cam=workspace.CurrentCamera
+    if not cam then return false end
+    local ok=false
+    pcall(function()
+        local sp,on=cam:WorldToViewportPoint(target.Position)
+        if on then
+            VIM:SendMouseMoveEvent(sp.X,sp.Y,false)
+            ok=true
+        end
+    end)
+    return ok
+end
 
 RegisterFeature("aim",{
     run=function()
         local t=GetTarget()
         if not t then return end
-        local cam=workspace.CurrentCamera
-        if not cam then return end
-        pcall(function() cam.CFrame=CFrame.new(cam.CFrame.Position,t.Position) end)
+        if aimMethod==1 then AimAlgo1(t) return end
+        if aimMethod==2 then AimAlgo2(t) return end
+        if aimMethod==3 then AimAlgo3(t) return end
+        if aimMethod==4 then AimAlgo4(t) return end
+        if aimMethod==5 then AimAlgo5(t) return end
+        if AimAlgo1(t) then aimMethod=1 print("[自瞄] SetMouseDelta") return end
+        if AimAlgo2(t) then aimMethod=2 print("[自瞄] mousemoverel") return end
+        if AimAlgo3(t) then aimMethod=3 print("[自瞄] Mouse.Move") return end
+        if AimAlgo4(t) then aimMethod=4 print("[自瞄] Humanoid转向") return end
+        if AimAlgo5(t) then aimMethod=5 print("[自瞄] VirtualInput") return end
+    end,
+    onDisable=function()
+        aimMethod=0
+        local c=LP.Character
+        if c then
+            local h=c:FindFirstChildOfClass("Humanoid")
+            if h then pcall(function() h.AutoRotate=true end) end
+        end
     end
 })
 local headList={}
@@ -636,15 +835,22 @@ local function IsMine(obj)
     if ow and ow.Value==LP then return true end
     return false
 end
+
+-- 算法：通用识别可追踪物品（不依赖特定名字，用关键词矩阵）
 local function IsTrackable(v)
     if not v:IsA("BasePart")then return false end
     local n=v.Name:lower()
-    if n:find("bullet")or n:find("projectile")or n:find("missile")then return true end
-    if n:find("item")or n:find("drop")or n:find("pickup")or n:find("loot")then return true end
-    if n:find("coin")or n:find("gem")or n:find("cash")then return true end
-    if n:find("resource")or n:find("ore")or n:find("wood")then return true end
+    -- 子弹类
+    if n:find("bullet")or n:find("projectile")or n:find("missile")or n:find("shell")or n:find("rocket")then return true end
+    -- 物品类
+    if n:find("item")or n:find("drop")or n:find("pickup")or n:find("loot")or n:find("part")then return true end
+    -- 金币类
+    if n:find("coin")or n:find("gem")or n:find("cash")or n:find("money")or n:find("gold")then return true end
+    -- 资源类
+    if n:find("resource")or n:find("ore")or n:find("wood")or n:find("stone")or n:find("crystal")then return true end
     return false
 end
+
 local function UpdateGreenLine(t)
     local cam=workspace.CurrentCamera
     if not cam or not t then GreenLine.Visible=false return end
@@ -752,6 +958,7 @@ task.spawn(function()
         task.wait(1)
         if FeatureState.fastInteract and DecryptCfg.decrypted then
             pcall(function()
+                -- 算法：扫描所有交互对象，不依赖特定名字
                 for _,v in pairs(workspace:GetDescendants())do
                     if v:IsA("ProximityPrompt")then
                         if v.HoldDuration~=0 then v.HoldDuration=0 end
@@ -771,19 +978,14 @@ RegisterFeature("noCooldown",{
     run=function()
         local c=LP.Character
         local toolList={}
-        if c then
-            for _,v in pairs(c:GetChildren())do
-                if v:IsA("Tool")then table.insert(toolList,v) end
-            end
-        end
-        for _,v in pairs(LP.Backpack:GetChildren())do
-            if v:IsA("Tool")then table.insert(toolList,v) end
-        end
+        if c then for _,v in pairs(c:GetChildren())do if v:IsA("Tool")then table.insert(toolList,v) end end end
+        for _,v in pairs(LP.Backpack:GetChildren())do if v:IsA("Tool")then table.insert(toolList,v) end end
         for _,tool in ipairs(toolList)do
+            -- 算法：扫描所有数值属性，关键词匹配冷却
             for _,v in pairs(tool:GetDescendants())do
                 if v:IsA("NumberValue")then
                     local n=v.Name:lower()
-                    if n:find("cooldown")or n:find("delay")or n:find("reload")or n:find("rate")then
+                    if n:find("cooldown")or n:find("delay")or n:find("reload")or n:find("rate")or n:find("cd")then
                         if v.Value~=0 then v.Value=0 end
                     end
                 end
@@ -794,70 +996,35 @@ RegisterFeature("noCooldown",{
                     end
                 end
             end
+            -- 算法：扫描工具属性
             pcall(function()
-                if tool:GetAttribute("Cooldown")then tool:SetAttribute("Cooldown",0) end
-                if tool:GetAttribute("Reloading")then tool:SetAttribute("Reloading",false) end
-                if tool:GetAttribute("LastUse")then tool:SetAttribute("LastUse",0) end
-                if tool:GetAttribute("FireRate")then tool:SetAttribute("FireRate",0.01) end
-            end)
-            for _,v in pairs(tool:GetDescendants())do
-                if v:IsA("Configuration")then
-                    for _,child in pairs(v:GetChildren())do
-                        if child:IsA("NumberValue")then
-                            local n=child.Name:lower()
-                            if n:find("cd")or n:find("rate")or n:find("delay")then child.Value=0 end
-                        end
+                for _,attr in ipairs(tool:GetAttributes())do
+                    local a=attr:lower()
+                    if a:find("cooldown")or a:find("reload")or a:find("lastuse")then
+                        tool:SetAttribute(attr,0)
                     end
                 end
-            end
+            end)
         end
     end
 })
 local HitboxCache={}
-
 local function BuildHitbox(char,scale)
     local hrp=char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    for _,v in pairs(char:GetChildren())do
-        if v.Name:sub(1,3)=="_hb"then pcall(function() v:Destroy() end) end
-    end
+    for _,v in pairs(char:GetChildren())do if v.Name:sub(1,3)=="_hb"then pcall(function() v:Destroy() end) end end
     local parts={
-        {name="_hb_head",base=Vector3.new(2,2,2),offset=Vector3.new(0,1.5,0)},
-        {name="_hb_upper",base=Vector3.new(4,2,2),offset=Vector3.new(0,0.5,0)},
-        {name="_hb_lower",base=Vector3.new(4,2,2),offset=Vector3.new(0,-0.5,0)},
-        {name="_hb_left",base=Vector3.new(2,2,2),offset=Vector3.new(-1.5,0.5,0)},
-        {name="_hb_right",base=Vector3.new(2,2,2),offset=Vector3.new(1.5,0.5,0)},
-        {name="_hb_center",base=Vector3.new(6,6,6),offset=Vector3.new(0,0,0)}
+        {n="_hb_head",b=Vector3.new(2,2,2),o=Vector3.new(0,1.5,0)},
+        {n="_hb_upper",b=Vector3.new(4,2,2),o=Vector3.new(0,0.5,0)},
+        {n="_hb_lower",b=Vector3.new(4,2,2),o=Vector3.new(0,-0.5,0)},
+        {n="_hb_left",b=Vector3.new(2,2,2),o=Vector3.new(-1.5,0.5,0)},
+        {n="_hb_right",b=Vector3.new(2,2,2),o=Vector3.new(1.5,0.5,0)},
+        {n="_hb_center",b=Vector3.new(6,6,6),o=Vector3.new(0,0,0)}
     }
-    for _,info in ipairs(parts)do
+    for _,i in ipairs(parts)do
         local hb=Instance.new("Part")
-        hb.Name=info.name
-        hb.Transparency=1
-        hb.CanCollide=false
-        hb.CanQuery=true
-        hb.CanTouch=true
-        hb.Anchored=true
-        hb.Massless=true
-        hb.Size=info.base*scale
-        hb.CFrame=hrp.CFrame*CFrame.new(info.offset)
-        hb.Parent=char
-    end
-end
-
-local function UpdateHitbox(char,scale)
-    local hrp=char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local offsets={
-        _hb_head=Vector3.new(0,1.5,0),
-        _hb_upper=Vector3.new(0,0.5,0),
-        _hb_lower=Vector3.new(0,-0.5,0),
-        _hb_left=Vector3.new(-1.5,0.5,0),
-        _hb_right=Vector3.new(1.5,0.5,0),
-        _hb_center=Vector3.new(0,0,0)
-    }
-    for name,offset in pairs(offsets)do
-        local hb=char:FindFirstChild(name)
-        if hb then hb.CFrame=hrp.CFrame*CFrame.new(offset) end
+        hb.Name=i.n hb.Transparency=1 hb.CanCollide=false hb.CanQuery=true hb.CanTouch=true hb.Anchored=true hb.Massless=true
+        hb.Size=i.b*scale hb.CFrame=hrp.CFrame*CFrame.new(i.o) hb.Parent=char
     end
 end
 
@@ -873,30 +1040,33 @@ local function ApplyHitbox()
                     pcall(function() BuildHitbox(p.Character,HitboxCfg.scale) end)
                     HitboxCache[p]=p.Character
                 else
-                    pcall(function() UpdateHitbox(p.Character,HitboxCfg.scale) end)
+                    local hrp=p.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        for _,v in pairs(p.Character:GetChildren())do
+                            if v.Name:sub(1,3)=="_hb"then v.CFrame=hrp.CFrame end
+                        end
+                    end
                 end
             end
         end
     end
 end
 
-local function RestoreHitbox()
-    for _,p in pairs(Players:GetPlayers())do
-        if p.Character then
-            for _,v in pairs(p.Character:GetChildren())do
-                if v.Name:sub(1,3)=="_hb"then pcall(function() v:Destroy() end) end
-            end
-        end
-    end
-    HitboxCache={}
-end
-
 RegisterFeature("hitbox",{
     run=function() ApplyHitbox() end,
-    onDisable=function() RestoreHitbox() end
+    onDisable=function()
+        for _,p in pairs(Players:GetPlayers())do
+            if p.Character then
+                for _,v in pairs(p.Character:GetChildren())do
+                    if v.Name:sub(1,3)=="_hb"then pcall(function() v:Destroy() end) end
+                end
+            end
+        end
+        HitboxCache={}
+    end
 })
-local DodgeCfg={range=20,cooldown=0}
 
+local DodgeCfg={range=20,cooldown=0}
 local function GetNearestThreat()
     local r=GetRoot()
     if not r then return nil end
@@ -904,14 +1074,11 @@ local function GetNearestThreat()
     for _,v in pairs(workspace:GetDescendants())do
         if v:IsA("BasePart")then
             local n=v.Name:lower()
-            local isThreat=false
-            if n:find("bullet")or n:find("projectile")or n:find("missile")then isThreat=true end
-            if isThreat then
+            if n:find("bullet")or n:find("projectile")or n:find("missile")then
                 local speed=v.AssemblyLinearVelocity.Magnitude
                 if speed>5 then
                     local toMe=(r.Position-v.Position).Unit
-                    local velDir=v.AssemblyLinearVelocity.Unit
-                    local dot=toMe:Dot(velDir)
+                    local dot=toMe:Dot(v.AssemblyLinearVelocity.Unit)
                     if dot>0.7 then
                         local dist=(r.Position-v.Position).Magnitude
                         if dist<bD then bD=dist best=v end
@@ -922,44 +1089,31 @@ local function GetNearestThreat()
     end
     return best
 end
-
-local function CalculateDodgeDir(threat)
+local function AlgoDodgeDir(threat)
     local r=GetRoot()
     if not r then return Vector3.new(0,0,0) end
     local toMe=(r.Position-threat.Position).Unit
-    local side=Vector3.new(-toMe.Z,0,toMe.X)
-    local away=toMe
-    return (side*0.7+away*0.3).Unit
+    return (Vector3.new(-toMe.Z,0,toMe.X)*0.7+toMe*0.3).Unit
 end
-
 RegisterFeature("dodge",{
     run=function()
-        if DodgeCfg.cooldown>0 then
-            DodgeCfg.cooldown=DodgeCfg.cooldown-1
-            return
-        end
-        local threat=GetNearestThreat()
-        if not threat then return end
+        if DodgeCfg.cooldown>0 then DodgeCfg.cooldown=DodgeCfg.cooldown-1 return end
+        local t=GetNearestThreat()
+        if not t then return end
         local r=GetRoot()
         if not r then return end
-        local dir=CalculateDodgeDir(threat)
+        local dir=AlgoDodgeDir(t)
         local h=GetHum()
         if h then
-            local currentSpeed=h.WalkSpeed
-            local dodgeSpeed=math.max(currentSpeed,30)
-            local bv=r:FindFirstChildOfClass("BodyVelocity")
-            if bv then
-                bv.Velocity=dir*dodgeSpeed+Vector3.new(0,15,0)
-            else
-                r.AssemblyLinearVelocity=dir*dodgeSpeed+Vector3.new(0,15,0)
-            end
+            r.AssemblyLinearVelocity=dir*math.max(h.WalkSpeed,30)+Vector3.new(0,15,0)
             DodgeCfg.cooldown=15
         end
     end
 })
+
 local function HandleToggle(key,btn,onT,offT)
     if not DecryptCfg.decrypted then
-        StatusLabel.Text="⚠️ 请先点菜单里的【开始解密】"
+        StatusLabel.Text="⚠️ 请先解密"
         StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
         wait(1.5)
         StatusLabel.Text="🔒 账号未解密"
@@ -986,10 +1140,7 @@ B4.MouseButton1Click:Connect(function()
     end
     HandleToggle("wall",B4)
 end)
-B5.MouseButton1Click:Connect(function()
-    HandleToggle("bt",B5)
-    AimRing.Visible=FeatureState.bt
-end)
+B5.MouseButton1Click:Connect(function() HandleToggle("bt",B5) AimRing.Visible=FeatureState.bt end)
 B6.MouseButton1Click:Connect(function() HandleToggle("jump",B6) end)
 B7.MouseButton1Click:Connect(function() HandleToggle("noFall",B7) end)
 B8.MouseButton1Click:Connect(function()
@@ -1044,22 +1195,8 @@ end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
 
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if h then
-            local old=h.WalkSpeed
-            pcall(function() h.WalkSpeed=100 end)
-            task.wait(0.1)
-            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
-            pcall(function() h.WalkSpeed=old end)
-        end
-    end)
-end)
-
 RunService.RenderStepped:Connect(function(dt)
     RunAllFeatures(dt)
 end)
 
-print("樱の辅助 V15 加载完成")
+print("樱の辅助 V16 加载完成 - 全算法驱动")
