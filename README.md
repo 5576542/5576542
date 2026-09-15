@@ -3,148 +3,169 @@ local RunService=game:GetService("RunService")
 local LP=Players.LocalPlayer
 local UIS=game:GetService("UserInputService")
 local CG=game:GetService("CoreGui")
-
-local Tip=Instance.new("Frame")
-Tip.Size=UDim2.new(0,420,0,35)
-Tip.Position=UDim2.new(0.5,-210,1,-55)
-Tip.BackgroundColor3=Color3.fromRGB(255,182,193)
-Tip.BackgroundTransparency=0.1
-Tip.Parent=CG
-Instance.new("UICorner",Tip).CornerRadius=UDim.new(0,17)
-local TipLabel=Instance.new("TextLabel")
-TipLabel.Size=UDim2.new(1,-20,1,0)
-TipLabel.Position=UDim2.new(0,10,0,0)
-TipLabel.BackgroundTransparency=1
-TipLabel.Text="今天也要元气满满哦~"
-TipLabel.TextColor3=Color3.fromRGB(255,255,255)
-TipLabel.Font=Enum.Font.GothamBold
-TipLabel.TextSize=13
-TipLabel.Parent=Tip
-task.spawn(function() wait(3) Tip:Destroy() end)
+local RS=game:GetService("ReplicatedStorage")
 
 local BG_ID="rbxassetid://131248212024332"
 local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
 
-local DecryptCfg={decrypted=false,encrypted=false,autoDecrypt=true}
+-- ==================== 游戏主题扫描 ====================
+local GameTheme={name="未知",genre="未知",hasAntiCheat=false,lockedValues={},encryptedRemotes={},decryptedRemotes={}}
 
-local function ReadAccountSignature()
-    local sig={userId=LP.UserId,name=LP.Name,displayName=LP.DisplayName,accountAge=LP.AccountAge,membershipType=tostring(LP.MembershipType),hasVerified=LP.HasVerifiedBadge,gameId=game.GameId,placeId=game.PlaceId,jobId=game.JobId}
-    local raw=tostring(sig.userId)..sig.name..tostring(sig.accountAge)..tostring(sig.gameId)
-    local hash=0
-    for i=1,#raw do hash=(hash*31+string.byte(raw,i))%2147483647 end
-    sig.hash=hash
-    sig.isEncrypted=(hash%2==0)
-    return sig
+local function ScanGameTheme()
+    -- 扫描游戏名
+    GameTheme.name=game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "未知"
+    
+    -- 扫描脚本关键词判断类型
+    local keywords={}
+    for _,v in pairs(game:GetDescendants())do
+        if v:IsA("Script")or v:IsA("LocalScript")then
+            local n=v.Name:lower()
+            if n:find("combat")or n:find("weapon")or n:find("gun")then table.insert(keywords,"fps") end
+            if n:find("tycoon")or n:find("factory")or n:find("money")then table.insert(keywords,"tycoon") end
+            if n:find("tycoon")or n:find("empire")or n:find("nation")then table.insert(keywords,"strategy") end
+        end
+    end
+    
+    -- 算法判断类型
+    if #keywords>0 then
+        local counts={}
+        for _,k in ipairs(keywords)do counts[k]=(counts[k]or 0)+1 end
+        local maxK,maxV="未知",0
+        for k,v in pairs(counts)do if v>maxV then maxV=v maxK=k end end
+        GameTheme.genre=maxK
+    end
+    
+    return GameTheme
 end
-
-local function ReadFlags()
+-- ==================== 加密扫描 + 解密 ====================
+local function ScanEncrypted()
+    GameTheme.lockedValues={}
+    GameTheme.encryptedRemotes={}
+    
+    -- 扫描1：锁定属性（游戏强制重置的）
     local c=LP.Character
     if c then
-        for _,v in pairs(c:GetChildren())do
+        local h=c:FindFirstChildOfClass("Humanoid")
+        if h then
+            local old=h.WalkSpeed
+            h.WalkSpeed=999
+            task.wait(0.05)
+            if math.abs(h.WalkSpeed-999)>5 then
+                table.insert(GameTheme.lockedValues,{obj=h,prop="WalkSpeed",type="被锁定"})
+            end
+            h.WalkSpeed=old
+        end
+    end
+    
+    -- 扫描2：加密远程事件（名字带 encrypt/secure/locked）
+    for _,v in pairs(RS:GetDescendants())do
+        if v:IsA("RemoteEvent")or v:IsA("RemoteFunction")then
             local n=v.Name:lower()
-            if n:find("encrypt")or n:find("lock")or n:find("secure")then
-                if v:IsA("BoolValue")and v.Value then return true end
-                if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
+            if n:find("encrypt")or n:find("secure")or n:find("locked")or n:find("protect")then
+                table.insert(GameTheme.encryptedRemotes,v)
             end
         end
     end
-    for _,v in pairs(LP:GetChildren())do
-        local n=v.Name:lower()
-        if n:find("encrypt")or n:find("lock")or n:find("secure")then
-            if v:IsA("BoolValue")and v.Value then return true end
+    
+    -- 扫描3：加密的 NumberValue/BoolValue
+    for _,v in pairs(workspace:GetDescendants())do
+        if v:IsA("NumberValue")or v:IsA("BoolValue")then
+            local n=v.Name:lower()
+            if n:find("encrypt")or n:find("secure")or n:find("locked")then
+                table.insert(GameTheme.lockedValues,{obj=v,prop="Value",type="加密值"})
+            end
         end
     end
-    return false
+    
+    return GameTheme
 end
 
-local function CheckEncrypted()
-    local sig=ReadAccountSignature()
-    if ReadFlags()then return true,sig end
-    if sig.isEncrypted then return true,sig end
-    return false,sig
+-- 解密函数
+local function DecryptAll()
+    local decrypted=0
+    
+    -- 解密1：解除属性锁定
+    for _,item in ipairs(GameTheme.lockedValues)do
+        pcall(function()
+            if item.obj and item.obj.Parent then
+                if item.prop=="Value"then
+                    item.obj.Value=0
+                end
+                decrypted=decrypted+1
+            end
+        end)
+    end
+    
+    -- 解密2：Hook 加密远程事件
+    for _,remote in ipairs(GameTheme.encryptedRemotes)do
+        pcall(function()
+            if remote:IsA("RemoteEvent")then
+                -- 保存原始回调
+                remote.OnClientEvent=function() end
+                table.insert(GameTheme.decryptedRemotes,remote)
+                decrypted=decrypted+1
+            end
+        end)
+    end
+    
+    return decrypted
 end
-
+-- ==================== 左上角状态栏 ====================
 local StatusBar=Instance.new("Frame")
-StatusBar.Size=UDim2.new(0,240,0,32)
+StatusBar.Size=UDim2.new(0,280,0,80)
 StatusBar.Position=UDim2.new(0,10,0,10)
-StatusBar.BackgroundColor3=Color3.fromRGB(30,30,45)
-StatusBar.BackgroundTransparency=0.2
+StatusBar.BackgroundColor3=Color3.fromRGB(25,25,40)
+StatusBar.BackgroundTransparency=0.15
 StatusBar.Parent=G
 Instance.new("UICorner",StatusBar).CornerRadius=UDim.new(0,8)
 
-local StatusDot=Instance.new("Frame")
-StatusDot.Size=UDim2.new(0,10,0,10)
-StatusDot.Position=UDim2.new(0,10,0,11)
-StatusDot.BackgroundColor3=Color3.fromRGB(255,80,80)
-StatusDot.Parent=StatusBar
-Instance.new("UICorner",StatusDot).CornerRadius=UDim.new(1,0)
+local TitleLabel=Instance.new("TextLabel")
+TitleLabel.Size=UDim2.new(1,-10,0,20)
+TitleLabel.Position=UDim2.new(0,5,0,5)
+TitleLabel.BackgroundTransparency=1
+TitleLabel.Text="🌸 樱の辅助"
+TitleLabel.TextColor3=Color3.fromRGB(255,150,200)
+TitleLabel.Font=Enum.Font.GothamBold
+TitleLabel.TextSize=12
+TitleLabel.TextXAlignment=Enum.TextXAlignment.Left
+TitleLabel.Parent=StatusBar
 
-local StatusLabel=Instance.new("TextLabel")
-StatusLabel.Size=UDim2.new(1,-35,1,0)
-StatusLabel.Position=UDim2.new(0,28,0,0)
-StatusLabel.BackgroundTransparency=1
-StatusLabel.Text="🔍 检测中..."
-StatusLabel.TextColor3=Color3.fromRGB(200,200,220)
-StatusLabel.Font=Enum.Font.GothamBold
-StatusLabel.TextSize=10
-StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
-StatusLabel.Parent=StatusBar
-local function DoDecrypt(sig)
-    DecryptCfg.decrypted=true
-    StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
-    StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
-    StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
-end
+local ThemeLabel=Instance.new("TextLabel")
+ThemeLabel.Size=UDim2.new(1,-10,0,16)
+ThemeLabel.Position=UDim2.new(0,5,0,24)
+ThemeLabel.BackgroundTransparency=1
+ThemeLabel.Text="主题: 扫描中..."
+ThemeLabel.TextColor3=Color3.fromRGB(150,200,255)
+ThemeLabel.Font=Enum.Font.Gotham
+ThemeLabel.TextSize=10
+ThemeLabel.TextXAlignment=Enum.TextXAlignment.Left
+ThemeLabel.Parent=StatusBar
 
-task.spawn(function()
-    while true do
-        task.wait(3)
-        local enc,sig=CheckEncrypted()
-        DecryptCfg.encrypted=enc
-        if enc then
-            if not DecryptCfg.decrypted then
-                if DecryptCfg.autoDecrypt then
-                    StatusLabel.Text="⚠️ 检测到加密，自动解密中..."
-                    StatusLabel.TextColor3=Color3.fromRGB(255,150,80)
-                    StatusDot.BackgroundColor3=Color3.fromRGB(255,180,80)
-                    DoDecrypt(sig)
-                else
-                    StatusLabel.Text="🔒 账号已加密"
-                    StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
-                end
-            else
-                StatusLabel.Text="✅ 已解密"
-                StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
-                StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
-            end
-        else
-            DecryptCfg.decrypted=true
-            StatusLabel.Text="✅ 账号未加密"
-            StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
-            StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
-        end
-    end
-end)
+local EncryptLabel=Instance.new("TextLabel")
+EncryptLabel.Size=UDim2.new(1,-10,0,16)
+EncryptLabel.Position=UDim2.new(0,5,0,40)
+EncryptLabel.BackgroundTransparency=1
+EncryptLabel.Text="加密: 检测中..."
+EncryptLabel.TextColor3=Color3.fromRGB(255,200,150)
+EncryptLabel.Font=Enum.Font.Gotham
+EncryptLabel.TextSize=10
+EncryptLabel.TextXAlignment=Enum.TextXAlignment.Left
+EncryptLabel.Parent=StatusBar
 
-local Features={}
-local FeatureState={}
-function RegisterFeature(k,c)
-    Features[k]=c or {}
-    FeatureState[k]=false
-end
-function ToggleFeature(k)
-    if not Features[k] then return false end
-    FeatureState[k]=not FeatureState[k]
-    return FeatureState[k]
-end
-function RunAllFeatures(dt)
-    if not DecryptCfg.decrypted then return end
-    for k,c in pairs(Features)do
-        if FeatureState[k] and c.run then pcall(c.run,dt) end
-    end
-end
+local DecryptLabel=Instance.new("TextLabel")
+DecryptLabel.Size=UDim2.new(1,-10,0,16)
+DecryptLabel.Position=UDim2.new(0,5,0,56)
+DecryptLabel.BackgroundTransparency=1
+DecryptLabel.Text="状态: 未解密"
+DecryptLabel.TextColor3=Color3.fromRGB(255,150,150)
+DecryptLabel.Font=Enum.Font.Gotham
+DecryptLabel.TextSize=10
+DecryptLabel.TextXAlignment=Enum.TextXAlignment.Left
+DecryptLabel.Parent=StatusBar
+
+local DecryptCfg={decrypted=false,encrypted=false}
 local Main=Instance.new("Frame")
 Main.Size=UDim2.new(0,320,0,420)
 Main.Position=UDim2.new(0.5,-160,0.5,-210)
@@ -288,7 +309,6 @@ local SpeedCfg={value=50,min=16,max=200,step=10}
 local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
 local HitboxCfg={scale=3,step=0.5,min=1,max=10}
 local WallCfg={lockedY=nil}
-local GameEnv={speedMethod="WalkSpeed",speedHooked=nil}
 
 local B1=Btn("自瞄")
 local B2=Btn("透视")
@@ -306,50 +326,41 @@ local B14=Btn("自动闪避")
 
 local panelBottom=36+math.ceil(BTN_INDEX/2)*30
 
+-- 扫描按钮
+local ScanBtn=Instance.new("TextButton")
+ScanBtn.Size=UDim2.new(0,240,0,28)
+ScanBtn.Position=UDim2.new(0,15,0,panelBottom+5)
+ScanBtn.BackgroundColor3=Color3.fromRGB(80,150,255)
+ScanBtn.Text="🔍 扫描游戏主题"
+ScanBtn.TextColor3=Color3.fromRGB(255,255,255)
+ScanBtn.Font=Enum.Font.GothamBold
+ScanBtn.TextSize=11
+Instance.new("UICorner",ScanBtn).CornerRadius=UDim.new(0,6)
+ScanBtn.Parent=Panel
+
+-- 解密按钮
 local DecryptBtn=Instance.new("TextButton")
-DecryptBtn.Size=UDim2.new(0,240,0,30)
-DecryptBtn.Position=UDim2.new(0,15,0,panelBottom+5)
+DecryptBtn.Size=UDim2.new(0,240,0,28)
+DecryptBtn.Position=UDim2.new(0,15,0,panelBottom+38)
 DecryptBtn.BackgroundColor3=Color3.fromRGB(255,80,80)
-DecryptBtn.Text="🔒 手动解密"
+DecryptBtn.Text="🔓 解密游戏数据"
 DecryptBtn.TextColor3=Color3.fromRGB(255,255,255)
 DecryptBtn.Font=Enum.Font.GothamBold
 DecryptBtn.TextSize=11
 Instance.new("UICorner",DecryptBtn).CornerRadius=UDim.new(0,6)
 DecryptBtn.Parent=Panel
 
-DecryptBtn.MouseButton1Click:Connect(function()
-    if DecryptCfg.decrypted then
-        DecryptCfg.decrypted=false
-        DecryptBtn.Text="🔒 手动解密"
-        DecryptBtn.BackgroundColor3=Color3.fromRGB(255,80,80)
-        return
-    end
-    local enc,sig=CheckEncrypted()
-    DecryptBtn.Text="⏳ 解密中..."
-    DecryptBtn.BackgroundColor3=Color3.fromRGB(255,180,80)
-    task.wait(0.5)
-    DoDecrypt(sig)
-    DecryptBtn.Text="✅ 已解密"
-    DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-end)
-
-local AutoDecryptBtn=Instance.new("TextButton")
-AutoDecryptBtn.Size=UDim2.new(0,240,0,24)
-AutoDecryptBtn.Position=UDim2.new(0,15,0,panelBottom+40)
-AutoDecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-AutoDecryptBtn.Text="自动解密: 开"
-AutoDecryptBtn.TextColor3=Color3.fromRGB(255,255,255)
-AutoDecryptBtn.Font=Enum.Font.GothamBold
-AutoDecryptBtn.TextSize=10
-Instance.new("UICorner",AutoDecryptBtn).CornerRadius=UDim.new(0,6)
-AutoDecryptBtn.Parent=Panel
-
-AutoDecryptBtn.MouseButton1Click:Connect(function()
-    DecryptCfg.autoDecrypt=not DecryptCfg.autoDecrypt
-    AutoDecryptBtn.BackgroundColor3=DecryptCfg.autoDecrypt and Color3.fromRGB(80,200,120) or Color3.fromRGB(255,80,80)
-    AutoDecryptBtn.Text=DecryptCfg.autoDecrypt and "自动解密: 开" or "自动解密: 关"
-end)
-
+-- 发送指令按钮
+local SendBtn=Instance.new("TextButton")
+SendBtn.Size=UDim2.new(0,240,0,28)
+SendBtn.Position=UDim2.new(0,15,0,panelBottom+71)
+SendBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+SendBtn.Text="📤 发送正常游戏指令"
+SendBtn.TextColor3=Color3.fromRGB(255,255,255)
+SendBtn.Font=Enum.Font.GothamBold
+SendBtn.TextSize=11
+Instance.new("UICorner",SendBtn).CornerRadius=UDim.new(0,6)
+SendBtn.Parent=Panel
 local function MakeSlider(yPos,getText,onSub,onAdd)
     local p=Instance.new("Frame")
     p.Size=UDim2.new(0,240,0,26)
@@ -391,21 +402,74 @@ local function MakeSlider(yPos,getText,onSub,onAdd)
     add.MouseButton1Click:Connect(function() onAdd() lb.Text=getText() end)
 end
 
-MakeSlider(panelBottom+70,
+MakeSlider(panelBottom+104,
     function() return "速度: "..SpeedCfg.value end,
     function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) end,
     function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) end
 )
-MakeSlider(panelBottom+98,
+MakeSlider(panelBottom+132,
     function() return "范围: "..AimCfg.range end,
     function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) end,
     function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) end
 )
-MakeSlider(panelBottom+126,
+MakeSlider(panelBottom+160,
     function() return "碰撞: x"..HitboxCfg.scale end,
     function() HitboxCfg.scale=math.max(HitboxCfg.min,HitboxCfg.scale-HitboxCfg.step) end,
     function() HitboxCfg.scale=math.min(HitboxCfg.max,HitboxCfg.scale+HitboxCfg.step) end
 )
+
+-- 扫描按钮事件
+ScanBtn.MouseButton1Click:Connect(function()
+    ScanBtn.Text="⏳ 扫描中..."
+    local theme=ScanGameTheme()
+    ThemeLabel.Text="主题: "..theme.name.." | "..theme.genre
+    task.wait(0.3)
+    local enc=ScanEncrypted()
+    EncryptLabel.Text="加密: 锁定"..#enc.lockedValues.."个 | 远程"..#enc.encryptedRemotes.."个"
+    ScanBtn.Text="✅ 扫描完成"
+    ScanBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+    task.wait(1)
+    ScanBtn.Text="🔍 扫描游戏主题"
+    ScanBtn.BackgroundColor3=Color3.fromRGB(80,150,255)
+end)
+
+-- 解密按钮事件
+DecryptBtn.MouseButton1Click:Connect(function()
+    DecryptBtn.Text="⏳ 解密中..."
+    local n=DecryptAll()
+    DecryptCfg.decrypted=true
+    DecryptLabel.Text="状态: 已解密 ("..n.."项)"
+    DecryptLabel.TextColor3=Color3.fromRGB(150,255,180)
+    DecryptBtn.Text="✅ 已解密"
+    DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+end)
+
+-- 发送指令按钮事件
+SendBtn.MouseButton1Click:Connect(function()
+    if not DecryptCfg.decrypted then
+        SendBtn.Text="⚠️ 请先解密"
+        wait(1.5)
+        SendBtn.Text="📤 发送正常游戏指令"
+        return
+    end
+    SendBtn.Text="⏳ 发送中..."
+    -- 发送正常的游戏指令（走合法的 RemoteEvent）
+    pcall(function()
+        for _,v in pairs(RS:GetDescendants())do
+            if v:IsA("RemoteEvent")then
+                local n=v.Name:lower()
+                -- 只发送看起来正常的指令
+                if n:find("request")or n:find("update")or n:find("sync")then
+                    pcall(function() v:FireServer() end)
+                end
+            end
+        end
+    end)
+    SendBtn.Text="✅ 已发送"
+    SendBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+    wait(1.5)
+    SendBtn.Text="📤 发送正常游戏指令"
+end)
 local AimRing=Instance.new("Frame")
 AimRing.Size=UDim2.new(0,200,0,200)
 AimRing.Position=UDim2.new(0.5,-100,0.5,-100)
@@ -434,8 +498,6 @@ local function GetRoot()
     local c=LP.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
-
--- 算法1：通用敌人识别（不依赖特定名字，用 Humanoid 判断）
 local function GetTarget()
     local r=GetRoot()
     if not r then return nil end
@@ -453,8 +515,7 @@ local function GetTarget()
     end
     return t
 end
-
--- 算法2：红圈内锁定
+local lockedTarget=nil
 local function GetRingTarget()
     local cam=workspace.CurrentCamera
     if not cam then return nil end
@@ -483,240 +544,7 @@ local function GetRingTarget()
     end
     return best
 end
-local lockedTarget=nil
--- 环境探测（算法判断游戏类型）
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local h=GetHum()
-        if h then
-            local old=h.WalkSpeed
-            pcall(function() h.WalkSpeed=100 end)
-            task.wait(0.1)
-            -- 算法：如果被游戏重置，说明有锁
-            if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
-            pcall(function() h.WalkSpeed=old end)
-        end
-    end)
-end)
-
-local speedMethod=0
-local speedHooked=nil
-
--- 算法方案1：直接改（最快的路径）
-local function SpeedAlgo1()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.WalkSpeed=SpeedCfg.value end)
-    return math.abs(h.WalkSpeed-SpeedCfg.value)<2
-end
-
--- 算法方案2：Hook 属性变化（游戏锁时用）
-local function SpeedAlgo2()
-    local h=GetHum()
-    if not h then return false end
-    if speedHooked~=h then
-        speedHooked=h
-        pcall(function()
-            h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-                if FeatureState.speed and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
-                    h.WalkSpeed=SpeedCfg.value
-                end
-            end)
-        end)
-    end
-    pcall(function() h.WalkSpeed=SpeedCfg.value end)
-    return true
-end
-
-RegisterFeature("speed",{
-    run=function()
-        if speedMethod==0 then
-            if GameEnv.speedMethod=="Hook" then speedMethod=2 else speedMethod=1 end
-        end
-        if speedMethod==1 then SpeedAlgo1() return end
-        if speedMethod==2 then SpeedAlgo2() return end
-        if SpeedAlgo1() then speedMethod=1 return end
-        if SpeedAlgo2() then speedMethod=2 return end
-    end,
-    onDisable=function()
-        speedMethod=0
-        local h=GetHum()
-        if h then pcall(function() h.WalkSpeed=16 end) end
-    end
-})
--- 高跳算法：按顺序试
-local jumpMethod=0
-local function JumpAlgo1()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
-    return h.JumpPower and h.JumpPower>=100
-end
-local function JumpAlgo2()
-    local h=GetHum()
-    if not h then return false end
-    pcall(function() h.UseJumpPower=false h.JumpHeight=30 end)
-    return h.JumpHeight and h.JumpHeight>=20
-end
-
-RegisterFeature("jump",{
-    run=function()
-        if jumpMethod==1 then JumpAlgo1() return end
-        if jumpMethod==2 then JumpAlgo2() return end
-        if JumpAlgo1() then jumpMethod=1 return end
-        if JumpAlgo2() then jumpMethod=2 return end
-    end,
-    onDisable=function()
-        jumpMethod=0
-        local h=GetHum()
-        if h then pcall(function() h.UseJumpPower=true h.JumpPower=50 end) end
-    end
-})
-
--- 坠落无伤算法
-RegisterFeature("noFall",{
-    run=function()
-        local h=GetHum()
-        if not h then return end
-        pcall(function()
-            h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
-            h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
-            if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
-        end)
-    end
-})
-local wallMethod=0
-local wallBP=nil
-
--- 算法方案1：改 CanCollide
-local function WallAlgo1()
-    local c=LP.Character
-    if not c then return false end
-    pcall(function()
-        for _,v in pairs(c:GetDescendants())do
-            if v:IsA("BasePart")then v.CanCollide=false end
-        end
-    end)
-    local r=c:FindFirstChild("HumanoidRootPart")
-    return r and r.CanCollide==false
-end
-
--- 算法方案2：改 CollisionGroup
-local function WallAlgo2()
-    local c=LP.Character
-    if not c then return false end
-    pcall(function()
-        local PS=game:GetService("PhysicsService")
-        for _,v in pairs(c:GetDescendants())do
-            if v:IsA("BasePart")then
-                pcall(function() PS:SetPartCollisionGroup(v,"NoCollide") end)
-            end
-        end
-    end)
-    return true
-end
-
-RegisterFeature("wall",{
-    run=function()
-        if wallMethod==1 then WallAlgo1() return end
-        if wallMethod==2 then WallAlgo2() return end
-        if WallAlgo1() then wallMethod=1 return end
-        if WallAlgo2() then wallMethod=2 return end
-        -- 锁Y防遁地
-        if WallCfg.lockedY then
-            local r=GetRoot()
-            if r then
-                local pos=r.Position
-                if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
-                    pcall(function() r.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z) end)
-                end
-            end
-        end
-    end,
-    onDisable=function()
-        wallMethod=0
-        WallCfg.lockedY=nil
-        local c=LP.Character
-        if c then
-            pcall(function()
-                for _,v in pairs(c:GetDescendants())do
-                    if v:IsA("BasePart")then v.CanCollide=true end
-                end
-            end)
-        end
-    end
-})
-local espList={}
-local espMethod=0
-
--- 算法：通用识别玩家（不依赖任何特定名）
-local function GetEnemies()
-    local list={}
-    for _,p in pairs(Players:GetPlayers())do
-        if p~=LP and p.Character then
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health>0 then
-                table.insert(list,p)
-            end
-        end
-    end
-    return list
-end
-
--- 算法方案1：Highlight
-local function EspAlgo1()
-    for _,p in pairs(GetEnemies())do
-        local has=false
-        for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-        if not has then
-            pcall(function()
-                local hl=Instance.new("Highlight")
-                hl.FillColor=Color3.fromRGB(255,182,193)
-                hl.FillTransparency=0.5
-                hl.Adornee=p.Character
-                hl.Parent=p.Character
-                table.insert(espList,hl)
-            end)
-        end
-    end
-    return #espList>0
-end
-
--- 算法方案2：SelectionBox
-local function EspAlgo2()
-    for _,p in pairs(GetEnemies())do
-        local has=false
-        for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-        if not has then
-            pcall(function()
-                local sb=Instance.new("SelectionBox")
-                sb.Color3=Color3.fromRGB(255,105,180)
-                sb.Adornee=p.Character
-                sb.Parent=p.Character
-                table.insert(espList,sb)
-            end)
-        end
-    end
-    return #espList>0
-end
-
-RegisterFeature("esp",{
-    run=function()
-        if espMethod==1 then EspAlgo1() return end
-        if espMethod==2 then EspAlgo2() return end
-        if EspAlgo1() then espMethod=1 return end
-        if EspAlgo2() then espMethod=2 return end
-    end,
-    onDisable=function()
-        espMethod=0
-        for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
-        espList={}
-    end
-})
 local aimMethod=0
-
--- 算法1：SetMouseDelta
 local function AimAlgo1(target)
     local cam=workspace.CurrentCamera
     if not cam or not UIS.SetMouseDelta then return false end
@@ -725,16 +553,12 @@ local function AimAlgo1(target)
         local sp,on=cam:WorldToViewportPoint(target.Position)
         if on then
             local vs=cam.ViewportSize
-            local dx=math.clamp((sp.X-vs.X/2)*0.5,-80,80)
-            local dy=math.clamp((sp.Y-vs.Y/2)*0.5,-80,80)
-            UIS:SetMouseDelta(Vector2.new(dx,dy))
+            UIS:SetMouseDelta(Vector2.new(math.clamp((sp.X-vs.X/2)*0.5,-80,80),math.clamp((sp.Y-vs.Y/2)*0.5,-80,80)))
             ok=true
         end
     end)
     return ok
 end
-
--- 算法2：mousemoverel
 local function AimAlgo2(target)
     if not mousemoverel then return false end
     local cam=workspace.CurrentCamera
@@ -750,8 +574,6 @@ local function AimAlgo2(target)
     end)
     return ok
 end
-
--- 算法3：Mouse.Move
 local function AimAlgo3(target)
     local cam=workspace.CurrentCamera
     if not cam then return false end
@@ -769,8 +591,6 @@ local function AimAlgo3(target)
     end)
     return ok
 end
-
--- 算法4：Humanoid 转身
 local function AimAlgo4(target)
     local c=LP.Character
     if not c then return false end
@@ -785,8 +605,6 @@ local function AimAlgo4(target)
     end)
     return ok
 end
-
--- 算法5：VirtualInputManager
 local function AimAlgo5(target)
     local VIM=game:GetService("VirtualInputManager")
     if not VIM then return false end
@@ -795,10 +613,7 @@ local function AimAlgo5(target)
     local ok=false
     pcall(function()
         local sp,on=cam:WorldToViewportPoint(target.Position)
-        if on then
-            VIM:SendMouseMoveEvent(sp.X,sp.Y,false)
-            ok=true
-        end
+        if on then VIM:SendMouseMoveEvent(sp.X,sp.Y,false) ok=true end
     end)
     return ok
 end
@@ -817,16 +632,130 @@ RegisterFeature("aim",{
         if AimAlgo3(t) then aimMethod=3 print("[自瞄] Mouse.Move") return end
         if AimAlgo4(t) then aimMethod=4 print("[自瞄] Humanoid转向") return end
         if AimAlgo5(t) then aimMethod=5 print("[自瞄] VirtualInput") return end
-    end,
-    onDisable=function()
-        aimMethod=0
-        local c=LP.Character
-        if c then
-            local h=c:FindFirstChildOfClass("Humanoid")
-            if h then pcall(function() h.AutoRotate=true end) end
-        end
     end
 })
+local speedMethod=0
+local speedHooked=nil
+local function SpeedAlgo1()
+    local h=GetHum()
+    if not h then return false end
+    pcall(function() h.WalkSpeed=SpeedCfg.value end)
+    return math.abs(h.WalkSpeed-SpeedCfg.value)<2
+end
+local function SpeedAlgo2()
+    local h=GetHum()
+    if not h then return false end
+    if speedHooked~=h then
+        speedHooked=h
+        pcall(function()
+            h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+                if FeatureState.speed and math.abs(h.WalkSpeed-SpeedCfg.value)>0.5 then
+                    h.WalkSpeed=SpeedCfg.value
+                end
+            end)
+        end)
+    end
+    pcall(function() h.WalkSpeed=SpeedCfg.value end)
+    return true
+end
+RegisterFeature("speed",{
+    run=function()
+        if speedMethod==0 then if math.abs((GetHum()and GetHum().WalkSpeed or 16)-SpeedCfg.value)>5 then speedMethod=1 else speedMethod=2 end end
+        if speedMethod==1 then SpeedAlgo1() return end
+        if speedMethod==2 then SpeedAlgo2() return end
+    end,
+    onDisable=function()
+        speedMethod=0
+        local h=GetHum()
+        if h then pcall(function() h.WalkSpeed=16 end) end
+    end
+})
+
+RegisterFeature("jump",{
+    run=function()
+        local h=GetHum()
+        if not h then return end
+        pcall(function() h.UseJumpPower=true h.JumpPower=120 end)
+    end
+})
+
+RegisterFeature("noFall",{
+    run=function()
+        local h=GetHum()
+        if not h then return end
+        pcall(function()
+            h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false)
+            h:SetStateEnabled(Enum.HumanoidStateType.Landed,false)
+            if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
+        end)
+    end
+})
+
+RegisterFeature("wall",{
+    run=function()
+        local c=LP.Character
+        if not c then return end
+        pcall(function()
+            for _,v in pairs(c:GetDescendants())do
+                if v:IsA("BasePart")then v.CanCollide=false end
+            end
+        end)
+        if WallCfg.lockedY then
+            local r=c:FindFirstChild("HumanoidRootPart")
+            if r then
+                local pos=r.Position
+                if math.abs(pos.Y-WallCfg.lockedY)>0.5 then
+                    pcall(function() r.CFrame=CFrame.new(pos.X,WallCfg.lockedY,pos.Z) end)
+                end
+            end
+        end
+    end,
+    onDisable=function()
+        local c=LP.Character
+        if c then
+            pcall(function()
+                for _,v in pairs(c:GetDescendants())do
+                    if v:IsA("BasePart")then v.CanCollide=true end
+                end
+            end)
+        end
+        WallCfg.lockedY=nil
+    end
+})
+local espList={}
+local function GetEnemies()
+    local list={}
+    for _,p in pairs(Players:GetPlayers())do
+        if p~=LP and p.Character then
+            local h=p.Character:FindFirstChildOfClass("Humanoid")
+            if h and h.Health>0 then table.insert(list,p) end
+        end
+    end
+    return list
+end
+RegisterFeature("esp",{
+    run=function()
+        for _,p in pairs(GetEnemies())do
+            local has=false
+            for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
+            if not has then
+                pcall(function()
+                    local hl=Instance.new("Highlight")
+                    hl.FillColor=Color3.fromRGB(255,182,193)
+                    hl.FillTransparency=0.5
+                    hl.Adornee=p.Character
+                    hl.Parent=p.Character
+                    table.insert(espList,hl)
+                end)
+            end
+        end
+    end,
+    onDisable=function()
+        for _,v in pairs(espList)do pcall(function() v:Destroy() end) end
+        espList={}
+    end
+})
+
 local headList={}
 local function IsMine(obj)
     local cr=obj:FindFirstChild("Creator")
@@ -835,22 +764,15 @@ local function IsMine(obj)
     if ow and ow.Value==LP then return true end
     return false
 end
-
--- 算法：通用识别可追踪物品（不依赖特定名字，用关键词矩阵）
 local function IsTrackable(v)
     if not v:IsA("BasePart")then return false end
     local n=v.Name:lower()
-    -- 子弹类
-    if n:find("bullet")or n:find("projectile")or n:find("missile")or n:find("shell")or n:find("rocket")then return true end
-    -- 物品类
-    if n:find("item")or n:find("drop")or n:find("pickup")or n:find("loot")or n:find("part")then return true end
-    -- 金币类
-    if n:find("coin")or n:find("gem")or n:find("cash")or n:find("money")or n:find("gold")then return true end
-    -- 资源类
-    if n:find("resource")or n:find("ore")or n:find("wood")or n:find("stone")or n:find("crystal")then return true end
+    if n:find("bullet")or n:find("projectile")or n:find("missile")then return true end
+    if n:find("item")or n:find("drop")or n:find("pickup")or n:find("loot")then return true end
+    if n:find("coin")or n:find("gem")or n:find("cash")then return true end
+    if n:find("resource")or n:find("ore")or n:find("wood")then return true end
     return false
 end
-
 local function UpdateGreenLine(t)
     local cam=workspace.CurrentCamera
     if not cam or not t then GreenLine.Visible=false return end
@@ -864,7 +786,6 @@ local function UpdateGreenLine(t)
     GreenLine.Rotation=math.deg(math.atan2(dy,dx))
     GreenLine.Visible=true
 end
-
 RegisterFeature("bt",{
     run=function()
         local rt=GetRingTarget()
@@ -874,28 +795,21 @@ RegisterFeature("bt",{
             if IsTrackable(v) and not IsMine(v) then
                 if (v.Position-lockedTarget.Position).Magnitude<350 then
                     local dir=(lockedTarget.Position-v.Position).Unit
-                    pcall(function()
-                        v.Velocity=dir*250
-                        v.CFrame=CFrame.new(v.Position,lockedTarget.Position)
-                    end)
+                    pcall(function() v.Velocity=dir*250 v.CFrame=CFrame.new(v.Position,lockedTarget.Position) end)
                 end
             end
         end
     end,
-    onDisable=function()
-        GreenLine.Visible=false
-        lockedTarget=nil
-    end
+    onDisable=function() GreenLine.Visible=false lockedTarget=nil end
 })
+
 local function UpdateHeadDisplay()
     for i=#headList,1,-1 do
         local item=headList[i]
         if item.bg and item.bg.Parent then
             local hum=item.char and item.char:FindFirstChildOfClass("Humanoid")
             if not hum or hum.Health<=0 then item.bg:Destroy() table.remove(headList,i) end
-        else
-            table.remove(headList,i)
-        end
+        else table.remove(headList,i) end
     end
     for _,p in pairs(Players:GetPlayers())do
         if p~=LP and p.Character then
@@ -942,13 +856,10 @@ local function UpdateHeadDisplay()
         end
     end
 end
-
 RegisterFeature("head",{
     run=function() UpdateHeadDisplay() end,
     onDisable=function()
-        for _,item in pairs(headList)do
-            if item.bg then pcall(function() item.bg:Destroy() end) end
-        end
+        for _,item in pairs(headList)do if item.bg then pcall(function() item.bg:Destroy() end) end end
         headList={}
     end
 })
@@ -958,7 +869,6 @@ task.spawn(function()
         task.wait(1)
         if FeatureState.fastInteract and DecryptCfg.decrypted then
             pcall(function()
-                -- 算法：扫描所有交互对象，不依赖特定名字
                 for _,v in pairs(workspace:GetDescendants())do
                     if v:IsA("ProximityPrompt")then
                         if v.HoldDuration~=0 then v.HoldDuration=0 end
@@ -981,33 +891,24 @@ RegisterFeature("noCooldown",{
         if c then for _,v in pairs(c:GetChildren())do if v:IsA("Tool")then table.insert(toolList,v) end end end
         for _,v in pairs(LP.Backpack:GetChildren())do if v:IsA("Tool")then table.insert(toolList,v) end end
         for _,tool in ipairs(toolList)do
-            -- 算法：扫描所有数值属性，关键词匹配冷却
             for _,v in pairs(tool:GetDescendants())do
                 if v:IsA("NumberValue")then
                     local n=v.Name:lower()
-                    if n:find("cooldown")or n:find("delay")or n:find("reload")or n:find("rate")or n:find("cd")then
+                    if n:find("cooldown")or n:find("delay")or n:find("reload")or n:find("rate")then
                         if v.Value~=0 then v.Value=0 end
                     end
                 end
-                if v:IsA("StringValue")then
-                    local n=v.Name:lower()
-                    if n:find("cooldown")or n:find("state")then
-                        pcall(function() if v.Value~="ready" then v.Value="ready" end end)
-                    end
-                end
             end
-            -- 算法：扫描工具属性
             pcall(function()
                 for _,attr in ipairs(tool:GetAttributes())do
                     local a=attr:lower()
-                    if a:find("cooldown")or a:find("reload")or a:find("lastuse")then
-                        tool:SetAttribute(attr,0)
-                    end
+                    if a:find("cooldown")or a:find("reload")then tool:SetAttribute(attr,0) end
                 end
             end)
         end
     end
 })
+
 local HitboxCache={}
 local function BuildHitbox(char,scale)
     local hrp=char:FindFirstChild("HumanoidRootPart")
@@ -1017,8 +918,6 @@ local function BuildHitbox(char,scale)
         {n="_hb_head",b=Vector3.new(2,2,2),o=Vector3.new(0,1.5,0)},
         {n="_hb_upper",b=Vector3.new(4,2,2),o=Vector3.new(0,0.5,0)},
         {n="_hb_lower",b=Vector3.new(4,2,2),o=Vector3.new(0,-0.5,0)},
-        {n="_hb_left",b=Vector3.new(2,2,2),o=Vector3.new(-1.5,0.5,0)},
-        {n="_hb_right",b=Vector3.new(2,2,2),o=Vector3.new(1.5,0.5,0)},
         {n="_hb_center",b=Vector3.new(6,6,6),o=Vector3.new(0,0,0)}
     }
     for _,i in ipairs(parts)do
@@ -1027,33 +926,23 @@ local function BuildHitbox(char,scale)
         hb.Size=i.b*scale hb.CFrame=hrp.CFrame*CFrame.new(i.o) hb.Parent=char
     end
 end
-
-local function ApplyHitbox()
-    for player,char in pairs(HitboxCache)do
-        if not player.Parent or not char or not char.Parent then HitboxCache[player]=nil end
-    end
-    for _,p in pairs(Players:GetPlayers())do
-        if p~=LP and p.Character then
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health>0 then
-                if HitboxCache[p]~=p.Character then
-                    pcall(function() BuildHitbox(p.Character,HitboxCfg.scale) end)
-                    HitboxCache[p]=p.Character
-                else
-                    local hrp=p.Character:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        for _,v in pairs(p.Character:GetChildren())do
-                            if v.Name:sub(1,3)=="_hb"then v.CFrame=hrp.CFrame end
-                        end
+RegisterFeature("hitbox",{
+    run=function()
+        for player,char in pairs(HitboxCache)do
+            if not player.Parent or not char or not char.Parent then HitboxCache[player]=nil end
+        end
+        for _,p in pairs(Players:GetPlayers())do
+            if p~=LP and p.Character then
+                local h=p.Character:FindFirstChildOfClass("Humanoid")
+                if h and h.Health>0 then
+                    if HitboxCache[p]~=p.Character then
+                        pcall(function() BuildHitbox(p.Character,HitboxCfg.scale) end)
+                        HitboxCache[p]=p.Character
                     end
                 end
             end
         end
-    end
-end
-
-RegisterFeature("hitbox",{
-    run=function() ApplyHitbox() end,
+    end,
     onDisable=function()
         for _,p in pairs(Players:GetPlayers())do
             if p.Character then
@@ -1067,57 +956,44 @@ RegisterFeature("hitbox",{
 })
 
 local DodgeCfg={range=20,cooldown=0}
-local function GetNearestThreat()
-    local r=GetRoot()
-    if not r then return nil end
-    local best,bD=nil,DodgeCfg.range
-    for _,v in pairs(workspace:GetDescendants())do
-        if v:IsA("BasePart")then
-            local n=v.Name:lower()
-            if n:find("bullet")or n:find("projectile")or n:find("missile")then
-                local speed=v.AssemblyLinearVelocity.Magnitude
-                if speed>5 then
-                    local toMe=(r.Position-v.Position).Unit
-                    local dot=toMe:Dot(v.AssemblyLinearVelocity.Unit)
-                    if dot>0.7 then
-                        local dist=(r.Position-v.Position).Magnitude
-                        if dist<bD then bD=dist best=v end
+RegisterFeature("dodge",{
+    run=function()
+        if DodgeCfg.cooldown>0 then DodgeCfg.cooldown=DodgeCfg.cooldown-1 return end
+        local r=GetRoot()
+        if not r then return end
+        local best,bD=nil,DodgeCfg.range
+        for _,v in pairs(workspace:GetDescendants())do
+            if v:IsA("BasePart")then
+                local n=v.Name:lower()
+                if n:find("bullet")or n:find("projectile")then
+                    if v.AssemblyLinearVelocity.Magnitude>5 then
+                        local toMe=(r.Position-v.Position).Unit
+                        if toMe:Dot(v.AssemblyLinearVelocity.Unit)>0.7 then
+                            local dist=(r.Position-v.Position).Magnitude
+                            if dist<bD then bD=dist best=v end
+                        end
                     end
                 end
             end
         end
-    end
-    return best
-end
-local function AlgoDodgeDir(threat)
-    local r=GetRoot()
-    if not r then return Vector3.new(0,0,0) end
-    local toMe=(r.Position-threat.Position).Unit
-    return (Vector3.new(-toMe.Z,0,toMe.X)*0.7+toMe*0.3).Unit
-end
-RegisterFeature("dodge",{
-    run=function()
-        if DodgeCfg.cooldown>0 then DodgeCfg.cooldown=DodgeCfg.cooldown-1 return end
-        local t=GetNearestThreat()
-        if not t then return end
-        local r=GetRoot()
-        if not r then return end
-        local dir=AlgoDodgeDir(t)
-        local h=GetHum()
-        if h then
-            r.AssemblyLinearVelocity=dir*math.max(h.WalkSpeed,30)+Vector3.new(0,15,0)
-            DodgeCfg.cooldown=15
+        if best then
+            local toMe=(r.Position-best.Position).Unit
+            local dir=(Vector3.new(-toMe.Z,0,toMe.X)*0.7+toMe*0.3).Unit
+            local h=GetHum()
+            if h then
+                r.AssemblyLinearVelocity=dir*math.max(h.WalkSpeed,30)+Vector3.new(0,15,0)
+                DodgeCfg.cooldown=15
+            end
         end
     end
 })
-
 local function HandleToggle(key,btn,onT,offT)
     if not DecryptCfg.decrypted then
-        StatusLabel.Text="⚠️ 请先解密"
-        StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
+        DecryptLabel.Text="⚠️ 请先点【解密游戏数据】"
+        DecryptLabel.TextColor3=Color3.fromRGB(255,200,80)
         wait(1.5)
-        StatusLabel.Text="🔒 账号未解密"
-        StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
+        DecryptLabel.Text="状态: 未解密"
+        DecryptLabel.TextColor3=Color3.fromRGB(255,150,150)
         return
     end
     local on=ToggleFeature(key)
@@ -1165,6 +1041,7 @@ KeyBtn.MouseButton1Click:Connect(function()
     end
     if ok then Main.Visible=false Panel.Visible=true end
 end)
+
 local Ball=Instance.new("TextButton")
 Ball.Size=UDim2.new(0,44,0,44)
 Ball.Position=UDim2.new(1,-60,1,-60)
@@ -1176,12 +1053,9 @@ Ball.TextSize=16
 Ball.Visible=false
 Ball.Parent=G
 Instance.new("UICorner",Ball).CornerRadius=UDim.new(1,0)
-
 local bds,bdp
 Ball.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        bds=i.Position bdp=Ball.Position
-    end
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then bds=i.Position bdp=Ball.Position end
 end)
 Ball.InputChanged:Connect(function(i)
     if (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) and bds then
@@ -1195,8 +1069,6 @@ end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
 
-RunService.RenderStepped:Connect(function(dt)
-    RunAllFeatures(dt)
-end)
+RunService.RenderStepped:Connect(function(dt) RunAllFeatures(dt) end)
 
-print("樱の辅助 V16 加载完成 - 全算法驱动")
+print("樱の辅助 V17 加载完成 - 主题扫描+解密+指令发送")
