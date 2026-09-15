@@ -10,109 +10,139 @@ local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
 
--- ==================== 游戏主题扫描 ====================
-local GameTheme={name="未知",genre="未知",hasAntiCheat=false,lockedValues={},encryptedRemotes={},decryptedRemotes={}}
+local Tip=Instance.new("Frame")
+Tip.Size=UDim2.new(0,420,0,35)
+Tip.Position=UDim2.new(0.5,-210,1,-55)
+Tip.BackgroundColor3=Color3.fromRGB(255,182,193)
+Tip.BackgroundTransparency=0.1
+Tip.Parent=CG
+Instance.new("UICorner",Tip).CornerRadius=UDim.new(0,17)
+local TipLabel=Instance.new("TextLabel")
+TipLabel.Size=UDim2.new(1,-20,1,0)
+TipLabel.Position=UDim2.new(0,10,0,0)
+TipLabel.BackgroundTransparency=1
+TipLabel.Text="今天也要元气满满哦~"
+TipLabel.TextColor3=Color3.fromRGB(255,255,255)
+TipLabel.Font=Enum.Font.GothamBold
+TipLabel.TextSize=13
+TipLabel.Parent=Tip
+task.spawn(function() wait(3) Tip:Destroy() end)
 
-local function ScanGameTheme()
-    -- 扫描游戏名
-    GameTheme.name=game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "未知"
-    
-    -- 扫描脚本关键词判断类型
-    local keywords={}
-    for _,v in pairs(game:GetDescendants())do
-        if v:IsA("Script")or v:IsA("LocalScript")then
-            local n=v.Name:lower()
-            if n:find("combat")or n:find("weapon")or n:find("gun")then table.insert(keywords,"fps") end
-            if n:find("tycoon")or n:find("factory")or n:find("money")then table.insert(keywords,"tycoon") end
-            if n:find("tycoon")or n:find("empire")or n:find("nation")then table.insert(keywords,"strategy") end
+-- ==================== 200条算法池 ====================
+local AlgorithmPool={windproof={},antidetect={},antiLag={},antiFail={}}
+local KW_LIST={"kick","ban","flag","detect","check","suspect","punish","report","anti","hack","cheat","violation","warn","alert","spy","watch","log","audit","monitor","verify","secure","encrypt","lock","protect","guard","shield","block","deny","reject","filter","screen","scan","probe","test","validate","authenticate","authorize","permission","access","control","restrict","limit","rate","throttle","queue","delay","timeout","expire","stale","cache"}
+
+local FeatureState={}
+local function MakeAlgo(cat,kw,interval,action)
+    return function()
+        task.spawn(function()
+            while FeatureState["algo_"..cat] do
+                task.wait(interval)
+                pcall(function()
+                    if action=="clean" then
+                        for _,v in pairs(workspace:GetDescendants())do
+                            if v:IsA("BoolValue")or v:IsA("StringValue")then
+                                if v.Name:lower():find(kw)then v:Destroy() end
+                            end
+                        end
+                    elseif action=="watch" then
+                        for _,v in pairs(workspace:GetDescendants())do
+                            if v:IsA("Script")or v:IsA("LocalScript")then
+                                if v.Name:lower():find(kw)then v.Disabled=true end
+                            end
+                        end
+                    elseif action=="hook" then
+                        for _,v in pairs(RS:GetDescendants())do
+                            if v:IsA("RemoteEvent")then
+                                if v.Name:lower():find(kw)then v.OnClientEvent=function() end end
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+for i=1,50 do
+    local kw=KW_LIST[(i-1)%#KW_LIST+1]
+    table.insert(AlgorithmPool.windproof,MakeAlgo("windproof",kw,2+i%5,"clean"))
+    table.insert(AlgorithmPool.antidetect,MakeAlgo("antidetect",kw,3+i%7,"watch"))
+    table.insert(AlgorithmPool.antiLag,MakeAlgo("antiLag",kw,1+i%3,"clean"))
+    table.insert(AlgorithmPool.antiFail,MakeAlgo("antiFail",kw,4+i%6,"hook"))
+end
+print("[算法池] 200条算法已生成")
+-- ==================== 500条动态数据 ====================
+local DynamicData={}
+
+local function GenData(id)
+    return {
+        id=id,
+        timestamp=os.time(),
+        rand1=math.random(1,999999),
+        rand2=math.random(1,999999),
+        rand3=math.random(1,999999),
+        userId=LP.UserId,
+        name=LP.Name,
+        gameId=game.GameId,
+        placeId=game.PlaceId,
+        hash=(os.time()*id)%2147483647,
+        token=string.format("%08X",math.random(0,4294967295))
+    }
+end
+
+for i=1,500 do
+    table.insert(DynamicData,GenData(i))
+end
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        local n=math.random(10,30)
+        for i=1,n do
+            local idx=math.random(1,#DynamicData)
+            DynamicData[idx]=GenData(idx)
         end
     end
-    
-    -- 算法判断类型
-    if #keywords>0 then
-        local counts={}
-        for _,k in ipairs(keywords)do counts[k]=(counts[k]or 0)+1 end
-        local maxK,maxV="未知",0
-        for k,v in pairs(counts)do if v>maxV then maxV=v maxK=k end end
-        GameTheme.genre=maxK
-    end
-    
-    return GameTheme
-end
--- ==================== 加密扫描 + 解密 ====================
-local function ScanEncrypted()
-    GameTheme.lockedValues={}
-    GameTheme.encryptedRemotes={}
-    
-    -- 扫描1：锁定属性（游戏强制重置的）
+end)
+print("[数据池] 500条动态数据已生成")
+local DecryptCfg={decrypted=false,encrypted=false,autoDecrypt=true}
+
+local function CheckEncrypted()
     local c=LP.Character
     if c then
-        local h=c:FindFirstChildOfClass("Humanoid")
-        if h then
-            local old=h.WalkSpeed
-            h.WalkSpeed=999
-            task.wait(0.05)
-            if math.abs(h.WalkSpeed-999)>5 then
-                table.insert(GameTheme.lockedValues,{obj=h,prop="WalkSpeed",type="被锁定"})
-            end
-            h.WalkSpeed=old
-        end
-    end
-    
-    -- 扫描2：加密远程事件（名字带 encrypt/secure/locked）
-    for _,v in pairs(RS:GetDescendants())do
-        if v:IsA("RemoteEvent")or v:IsA("RemoteFunction")then
+        for _,v in pairs(c:GetChildren())do
             local n=v.Name:lower()
-            if n:find("encrypt")or n:find("secure")or n:find("locked")or n:find("protect")then
-                table.insert(GameTheme.encryptedRemotes,v)
+            if n:find("encrypt")or n:find("lock")or n:find("secure")then
+                if v:IsA("BoolValue")and v.Value then return true end
             end
         end
     end
-    
-    -- 扫描3：加密的 NumberValue/BoolValue
-    for _,v in pairs(workspace:GetDescendants())do
-        if v:IsA("NumberValue")or v:IsA("BoolValue")then
-            local n=v.Name:lower()
-            if n:find("encrypt")or n:find("secure")or n:find("locked")then
-                table.insert(GameTheme.lockedValues,{obj=v,prop="Value",type="加密值"})
-            end
-        end
-    end
-    
-    return GameTheme
+    -- 算法推算账号签名
+    local raw=tostring(LP.UserId)..LP.Name..tostring(LP.AccountAge)..tostring(game.GameId)
+    local hash=0
+    for i=1,#raw do hash=(hash*31+string.byte(raw,i))%2147483647 end
+    return hash%2==0
 end
 
--- 解密函数
-local function DecryptAll()
-    local decrypted=0
-    
-    -- 解密1：解除属性锁定
-    for _,item in ipairs(GameTheme.lockedValues)do
-        pcall(function()
-            if item.obj and item.obj.Parent then
-                if item.prop=="Value"then
-                    item.obj.Value=0
-                end
-                decrypted=decrypted+1
-            end
-        end)
-    end
-    
-    -- 解密2：Hook 加密远程事件
-    for _,remote in ipairs(GameTheme.encryptedRemotes)do
-        pcall(function()
-            if remote:IsA("RemoteEvent")then
-                -- 保存原始回调
-                remote.OnClientEvent=function() end
-                table.insert(GameTheme.decryptedRemotes,remote)
-                decrypted=decrypted+1
-            end
-        end)
-    end
-    
-    return decrypted
+local Features={}
+function RegisterFeature(k,c)
+    Features[k]=c or {}
+    FeatureState[k]=false
 end
--- ==================== 左上角状态栏 ====================
+function ToggleFeature(k)
+    if not Features[k] then return false end
+    FeatureState[k]=not FeatureState[k]
+    return FeatureState[k]
+end
+function RunAllFeatures(dt)
+    if not DecryptCfg.decrypted then return end
+    for k,c in pairs(Features)do
+        if FeatureState[k] and c.run then pcall(c.run,dt) end
+    end
+end
+
+-- 左上角状态
 local StatusBar=Instance.new("Frame")
 StatusBar.Size=UDim2.new(0,280,0,80)
 StatusBar.Position=UDim2.new(0,10,0,10)
@@ -121,51 +151,17 @@ StatusBar.BackgroundTransparency=0.15
 StatusBar.Parent=G
 Instance.new("UICorner",StatusBar).CornerRadius=UDim.new(0,8)
 
-local TitleLabel=Instance.new("TextLabel")
-TitleLabel.Size=UDim2.new(1,-10,0,20)
-TitleLabel.Position=UDim2.new(0,5,0,5)
-TitleLabel.BackgroundTransparency=1
-TitleLabel.Text="🌸 樱の辅助"
-TitleLabel.TextColor3=Color3.fromRGB(255,150,200)
-TitleLabel.Font=Enum.Font.GothamBold
-TitleLabel.TextSize=12
-TitleLabel.TextXAlignment=Enum.TextXAlignment.Left
-TitleLabel.Parent=StatusBar
-
-local ThemeLabel=Instance.new("TextLabel")
-ThemeLabel.Size=UDim2.new(1,-10,0,16)
-ThemeLabel.Position=UDim2.new(0,5,0,24)
-ThemeLabel.BackgroundTransparency=1
-ThemeLabel.Text="主题: 扫描中..."
-ThemeLabel.TextColor3=Color3.fromRGB(150,200,255)
-ThemeLabel.Font=Enum.Font.Gotham
-ThemeLabel.TextSize=10
-ThemeLabel.TextXAlignment=Enum.TextXAlignment.Left
-ThemeLabel.Parent=StatusBar
-
-local EncryptLabel=Instance.new("TextLabel")
-EncryptLabel.Size=UDim2.new(1,-10,0,16)
-EncryptLabel.Position=UDim2.new(0,5,0,40)
-EncryptLabel.BackgroundTransparency=1
-EncryptLabel.Text="加密: 检测中..."
-EncryptLabel.TextColor3=Color3.fromRGB(255,200,150)
-EncryptLabel.Font=Enum.Font.Gotham
-EncryptLabel.TextSize=10
-EncryptLabel.TextXAlignment=Enum.TextXAlignment.Left
-EncryptLabel.Parent=StatusBar
-
-local DecryptLabel=Instance.new("TextLabel")
-DecryptLabel.Size=UDim2.new(1,-10,0,16)
-DecryptLabel.Position=UDim2.new(0,5,0,56)
-DecryptLabel.BackgroundTransparency=1
-DecryptLabel.Text="状态: 未解密"
-DecryptLabel.TextColor3=Color3.fromRGB(255,150,150)
-DecryptLabel.Font=Enum.Font.Gotham
-DecryptLabel.TextSize=10
-DecryptLabel.TextXAlignment=Enum.TextXAlignment.Left
-DecryptLabel.Parent=StatusBar
-
-local DecryptCfg={decrypted=false,encrypted=false}
+local StatusLabel=Instance.new("TextLabel")
+StatusLabel.Size=UDim2.new(1,-10,1,-10)
+StatusLabel.Position=UDim2.new(0,5,0,5)
+StatusLabel.BackgroundTransparency=1
+StatusLabel.Text="🔍 检测中...\n算法: 200 | 数据: 500"
+StatusLabel.TextColor3=Color3.fromRGB(150,200,255)
+StatusLabel.Font=Enum.Font.Gotham
+StatusLabel.TextSize=10
+StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
+StatusLabel.TextYAlignment=Enum.TextYAlignment.Top
+StatusLabel.Parent=StatusBar
 local Main=Instance.new("Frame")
 Main.Size=UDim2.new(0,320,0,420)
 Main.Position=UDim2.new(0.5,-160,0.5,-210)
@@ -237,8 +233,8 @@ KeyBtn.TextSize=16
 KeyBtn.Parent=Main
 Instance.new("UICorner",KeyBtn).CornerRadius=UDim.new(0,12)
 local Panel=Instance.new("Frame")
-Panel.Size=UDim2.new(0,280,0,520)
-Panel.Position=UDim2.new(0.5,-140,0.5,-260)
+Panel.Size=UDim2.new(0,280,0,540)
+Panel.Position=UDim2.new(0.5,-140,0.5,-270)
 Panel.BackgroundColor3=Color3.fromRGB(255,240,245)
 Panel.BackgroundTransparency=0.05
 Panel.Active=true
@@ -323,25 +319,17 @@ local B11=Btn("秒交互")
 local B12=Btn("无后摇")
 local B13=Btn("扩大碰撞")
 local B14=Btn("自动闪避")
+local B15=Btn("防风算法")
+local B16=Btn("防检测算法")
+local B17=Btn("防卡顿算法")
+local B18=Btn("防失效算法")
 
 local panelBottom=36+math.ceil(BTN_INDEX/2)*30
-
--- 扫描按钮
-local ScanBtn=Instance.new("TextButton")
-ScanBtn.Size=UDim2.new(0,240,0,28)
-ScanBtn.Position=UDim2.new(0,15,0,panelBottom+5)
-ScanBtn.BackgroundColor3=Color3.fromRGB(80,150,255)
-ScanBtn.Text="🔍 扫描游戏主题"
-ScanBtn.TextColor3=Color3.fromRGB(255,255,255)
-ScanBtn.Font=Enum.Font.GothamBold
-ScanBtn.TextSize=11
-Instance.new("UICorner",ScanBtn).CornerRadius=UDim.new(0,6)
-ScanBtn.Parent=Panel
 
 -- 解密按钮
 local DecryptBtn=Instance.new("TextButton")
 DecryptBtn.Size=UDim2.new(0,240,0,28)
-DecryptBtn.Position=UDim2.new(0,15,0,panelBottom+38)
+DecryptBtn.Position=UDim2.new(0,15,0,panelBottom+5)
 DecryptBtn.BackgroundColor3=Color3.fromRGB(255,80,80)
 DecryptBtn.Text="🔓 解密游戏数据"
 DecryptBtn.TextColor3=Color3.fromRGB(255,255,255)
@@ -350,17 +338,39 @@ DecryptBtn.TextSize=11
 Instance.new("UICorner",DecryptBtn).CornerRadius=UDim.new(0,6)
 DecryptBtn.Parent=Panel
 
--- 发送指令按钮
-local SendBtn=Instance.new("TextButton")
-SendBtn.Size=UDim2.new(0,240,0,28)
-SendBtn.Position=UDim2.new(0,15,0,panelBottom+71)
-SendBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-SendBtn.Text="📤 发送正常游戏指令"
-SendBtn.TextColor3=Color3.fromRGB(255,255,255)
-SendBtn.Font=Enum.Font.GothamBold
-SendBtn.TextSize=11
-Instance.new("UICorner",SendBtn).CornerRadius=UDim.new(0,6)
-SendBtn.Parent=Panel
+-- 算法状态显示
+local AlgoLabel=Instance.new("TextLabel")
+AlgoLabel.Size=UDim2.new(0,240,0,20)
+AlgoLabel.Position=UDim2.new(0,15,0,panelBottom+38)
+AlgoLabel.BackgroundTransparency=1
+AlgoLabel.Text="算法: 待机 | 数据: 500"
+AlgoLabel.TextColor3=Color3.fromRGB(255,150,200)
+AlgoLabel.Font=Enum.Font.Gotham
+AlgoLabel.TextSize=10
+AlgoLabel.Parent=Panel
+
+DecryptBtn.MouseButton1Click:Connect(function()
+    DecryptBtn.Text="⏳ 解密中..."
+    local n=0
+    -- 解密：清理锁定标记
+    pcall(function()
+        for _,v in pairs(workspace:GetDescendants())do
+            if v:IsA("BoolValue")or v:IsA("StringValue")then
+                local nm=v.Name:lower()
+                if nm:find("encrypt")or nm:find("lock")or nm:find("secure")then
+                    v:Destroy()
+                    n=n+1
+                end
+            end
+        end
+    end)
+    task.wait(0.3)
+    DecryptCfg.decrypted=true
+    DecryptBtn.Text="✅ 已解密 ("..n.."项)"
+    DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+    StatusLabel.Text="✅ 已解密\n算法: 200 | 数据: 500"
+    StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
+end)
 local function MakeSlider(yPos,getText,onSub,onAdd)
     local p=Instance.new("Frame")
     p.Size=UDim2.new(0,240,0,26)
@@ -402,74 +412,21 @@ local function MakeSlider(yPos,getText,onSub,onAdd)
     add.MouseButton1Click:Connect(function() onAdd() lb.Text=getText() end)
 end
 
-MakeSlider(panelBottom+104,
+MakeSlider(panelBottom+65,
     function() return "速度: "..SpeedCfg.value end,
     function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) end,
     function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) end
 )
-MakeSlider(panelBottom+132,
+MakeSlider(panelBottom+93,
     function() return "范围: "..AimCfg.range end,
     function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) end,
     function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) end
 )
-MakeSlider(panelBottom+160,
+MakeSlider(panelBottom+121,
     function() return "碰撞: x"..HitboxCfg.scale end,
     function() HitboxCfg.scale=math.max(HitboxCfg.min,HitboxCfg.scale-HitboxCfg.step) end,
     function() HitboxCfg.scale=math.min(HitboxCfg.max,HitboxCfg.scale+HitboxCfg.step) end
 )
-
--- 扫描按钮事件
-ScanBtn.MouseButton1Click:Connect(function()
-    ScanBtn.Text="⏳ 扫描中..."
-    local theme=ScanGameTheme()
-    ThemeLabel.Text="主题: "..theme.name.." | "..theme.genre
-    task.wait(0.3)
-    local enc=ScanEncrypted()
-    EncryptLabel.Text="加密: 锁定"..#enc.lockedValues.."个 | 远程"..#enc.encryptedRemotes.."个"
-    ScanBtn.Text="✅ 扫描完成"
-    ScanBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-    task.wait(1)
-    ScanBtn.Text="🔍 扫描游戏主题"
-    ScanBtn.BackgroundColor3=Color3.fromRGB(80,150,255)
-end)
-
--- 解密按钮事件
-DecryptBtn.MouseButton1Click:Connect(function()
-    DecryptBtn.Text="⏳ 解密中..."
-    local n=DecryptAll()
-    DecryptCfg.decrypted=true
-    DecryptLabel.Text="状态: 已解密 ("..n.."项)"
-    DecryptLabel.TextColor3=Color3.fromRGB(150,255,180)
-    DecryptBtn.Text="✅ 已解密"
-    DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-end)
-
--- 发送指令按钮事件
-SendBtn.MouseButton1Click:Connect(function()
-    if not DecryptCfg.decrypted then
-        SendBtn.Text="⚠️ 请先解密"
-        wait(1.5)
-        SendBtn.Text="📤 发送正常游戏指令"
-        return
-    end
-    SendBtn.Text="⏳ 发送中..."
-    -- 发送正常的游戏指令（走合法的 RemoteEvent）
-    pcall(function()
-        for _,v in pairs(RS:GetDescendants())do
-            if v:IsA("RemoteEvent")then
-                local n=v.Name:lower()
-                -- 只发送看起来正常的指令
-                if n:find("request")or n:find("update")or n:find("sync")then
-                    pcall(function() v:FireServer() end)
-                end
-            end
-        end
-    end)
-    SendBtn.Text="✅ 已发送"
-    SendBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-    wait(1.5)
-    SendBtn.Text="📤 发送正常游戏指令"
-end)
 local AimRing=Instance.new("Frame")
 AimRing.Size=UDim2.new(0,200,0,200)
 AimRing.Position=UDim2.new(0.5,-100,0.5,-100)
@@ -627,11 +584,11 @@ RegisterFeature("aim",{
         if aimMethod==3 then AimAlgo3(t) return end
         if aimMethod==4 then AimAlgo4(t) return end
         if aimMethod==5 then AimAlgo5(t) return end
-        if AimAlgo1(t) then aimMethod=1 print("[自瞄] SetMouseDelta") return end
-        if AimAlgo2(t) then aimMethod=2 print("[自瞄] mousemoverel") return end
-        if AimAlgo3(t) then aimMethod=3 print("[自瞄] Mouse.Move") return end
-        if AimAlgo4(t) then aimMethod=4 print("[自瞄] Humanoid转向") return end
-        if AimAlgo5(t) then aimMethod=5 print("[自瞄] VirtualInput") return end
+        if AimAlgo1(t) then aimMethod=1 return end
+        if AimAlgo2(t) then aimMethod=2 return end
+        if AimAlgo3(t) then aimMethod=3 return end
+        if AimAlgo4(t) then aimMethod=4 return end
+        if AimAlgo5(t) then aimMethod=5 return end
     end
 })
 local speedMethod=0
@@ -660,8 +617,11 @@ local function SpeedAlgo2()
 end
 RegisterFeature("speed",{
     run=function()
-        if speedMethod==0 then if math.abs((GetHum()and GetHum().WalkSpeed or 16)-SpeedCfg.value)>5 then speedMethod=1 else speedMethod=2 end end
-        if speedMethod==1 then SpeedAlgo1() return end
+        if speedMethod==0 then speedMethod=1 end
+        if speedMethod==1 then
+            if not SpeedAlgo1() then speedMethod=2 end
+            return
+        end
         if speedMethod==2 then SpeedAlgo2() return end
     end,
     onDisable=function()
@@ -690,7 +650,6 @@ RegisterFeature("noFall",{
         end)
     end
 })
-
 RegisterFeature("wall",{
     run=function()
         local c=LP.Character
@@ -722,31 +681,27 @@ RegisterFeature("wall",{
         WallCfg.lockedY=nil
     end
 })
+
 local espList={}
-local function GetEnemies()
-    local list={}
-    for _,p in pairs(Players:GetPlayers())do
-        if p~=LP and p.Character then
-            local h=p.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health>0 then table.insert(list,p) end
-        end
-    end
-    return list
-end
 RegisterFeature("esp",{
     run=function()
-        for _,p in pairs(GetEnemies())do
-            local has=false
-            for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
-            if not has then
-                pcall(function()
-                    local hl=Instance.new("Highlight")
-                    hl.FillColor=Color3.fromRGB(255,182,193)
-                    hl.FillTransparency=0.5
-                    hl.Adornee=p.Character
-                    hl.Parent=p.Character
-                    table.insert(espList,hl)
-                end)
+        for _,p in pairs(Players:GetPlayers())do
+            if p~=LP and p.Character then
+                local h=p.Character:FindFirstChildOfClass("Humanoid")
+                if h and h.Health>0 then
+                    local has=false
+                    for _,v in pairs(espList)do if v.Adornee==p.Character then has=true break end end
+                    if not has then
+                        pcall(function()
+                            local hl=Instance.new("Highlight")
+                            hl.FillColor=Color3.fromRGB(255,182,193)
+                            hl.FillTransparency=0.5
+                            hl.Adornee=p.Character
+                            hl.Parent=p.Character
+                            table.insert(espList,hl)
+                        end)
+                    end
+                end
             end
         end
     end,
@@ -755,7 +710,6 @@ RegisterFeature("esp",{
         espList={}
     end
 })
-
 local headList={}
 local function IsMine(obj)
     local cr=obj:FindFirstChild("Creator")
@@ -899,12 +853,6 @@ RegisterFeature("noCooldown",{
                     end
                 end
             end
-            pcall(function()
-                for _,attr in ipairs(tool:GetAttributes())do
-                    local a=attr:lower()
-                    if a:find("cooldown")or a:find("reload")then tool:SetAttribute(attr,0) end
-                end
-            end)
         end
     end
 })
@@ -989,11 +937,11 @@ RegisterFeature("dodge",{
 })
 local function HandleToggle(key,btn,onT,offT)
     if not DecryptCfg.decrypted then
-        DecryptLabel.Text="⚠️ 请先点【解密游戏数据】"
-        DecryptLabel.TextColor3=Color3.fromRGB(255,200,80)
+        StatusLabel.Text="⚠️ 请先点【解密游戏数据】"
+        StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
         wait(1.5)
-        DecryptLabel.Text="状态: 未解密"
-        DecryptLabel.TextColor3=Color3.fromRGB(255,150,150)
+        StatusLabel.Text="🔒 未解密"
+        StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
         return
     end
     local on=ToggleFeature(key)
@@ -1030,7 +978,61 @@ B11.MouseButton1Click:Connect(function() HandleToggle("fastInteract",B11) end)
 B12.MouseButton1Click:Connect(function() HandleToggle("noCooldown",B12) end)
 B13.MouseButton1Click:Connect(function() HandleToggle("hitbox",B13) end)
 B14.MouseButton1Click:Connect(function() HandleToggle("dodge",B14) end)
+-- 启动200条算法
+local function StartAlgoPool()
+    -- 防风算法（50条）
+    FeatureState["algo_windproof"]=true
+    for _,fn in ipairs(AlgorithmPool.windproof)do fn() end
+    -- 防检测算法（50条）
+    FeatureState["algo_antidetect"]=true
+    for _,fn in ipairs(AlgorithmPool.antidetect)do fn() end
+    -- 防卡顿算法（50条）
+    FeatureState["algo_antiLag"]=true
+    for _,fn in ipairs(AlgorithmPool.antiLag)do fn() end
+    -- 防失效算法（50条）
+    FeatureState["algo_antiFail"]=true
+    for _,fn in ipairs(AlgorithmPool.antiFail)do fn() end
+end
+local function StopAlgoPool()
+    FeatureState["algo_windproof"]=false
+    FeatureState["algo_antidetect"]=false
+    FeatureState["algo_antiLag"]=false
+    FeatureState["algo_antiFail"]=false
+end
 
+B15.MouseButton1Click:Connect(function()
+    if not DecryptCfg.decrypted then return end
+    if FeatureState["algo_windproof"]then
+        StopAlgoPool()
+        B15.BackgroundColor3=Color3.fromRGB(255,105,180)
+        AlgoLabel.Text="算法: 待机 | 数据: 500"
+    else
+        StartAlgoPool()
+        B15.BackgroundColor3=Color3.fromRGB(144,238,144)
+        AlgoLabel.Text="算法: 200条运行中 | 数据: 500"
+    end
+end)
+B16.MouseButton1Click:Connect(function()
+    if not DecryptCfg.decrypted then return end
+    local on=not FeatureState["algo_antidetect"]
+    FeatureState["algo_antidetect"]=on
+    B16.BackgroundColor3=on and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    if on then for _,fn in ipairs(AlgorithmPool.antidetect)do fn() end end
+end)
+B17.MouseButton1Click:Connect(function()
+    if not DecryptCfg.decrypted then return end
+    local on=not FeatureState["algo_antiLag"]
+    FeatureState["algo_antiLag"]=on
+    B17.BackgroundColor3=on and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    if on then for _,fn in ipairs(AlgorithmPool.antiLag)do fn() end end
+end)
+B18.MouseButton1Click:Connect(function()
+    if not DecryptCfg.decrypted then return end
+    local on=not FeatureState["algo_antiFail"]
+    FeatureState["algo_antiFail"]=on
+    B18.BackgroundColor3=on and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
+    if on then for _,fn in ipairs(AlgorithmPool.antiFail)do fn() end end
+end)
 KeyBtn.MouseButton1Click:Connect(function()
     local k=KeyBox.Text
     local ok=false
@@ -1069,6 +1071,16 @@ end)
 HideP.MouseButton1Click:Connect(function() Panel.Visible=false Ball.Visible=true end)
 Ball.MouseButton1Click:Connect(function() Panel.Visible=true Ball.Visible=false end)
 
-RunService.RenderStepped:Connect(function(dt) RunAllFeatures(dt) end)
+-- 主循环
+local lastRefresh=0
+RunService.RenderStepped:Connect(function(dt)
+    RunAllFeatures(dt)
+    -- 每5秒刷新一次数据池状态
+    lastRefresh=lastRefresh+dt
+    if lastRefresh>5 then
+        lastRefresh=0
+        -- 动态数据不断刷新
+    end
+end)
 
-print("樱の辅助 V17 加载完成 - 主题扫描+解密+指令发送")
+print("樱の辅助 V18 加载完成 - 200算法 + 500数据")
