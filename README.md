@@ -27,10 +27,74 @@ local G=Instance.new("ScreenGui")
 G.ResetOnSpawn=false
 G.Parent=CG
 
-local DecryptCfg={encrypted=true,decrypted=false}
+local DecryptCfg={decrypted=false,encrypted=false,autoDecrypt=true}
 
+local function ReadAccountSignature()
+    local sig={
+        userId=LP.UserId,
+        name=LP.Name,
+        displayName=LP.DisplayName,
+        accountAge=LP.AccountAge,
+        membershipType=tostring(LP.MembershipType),
+        hasVerified=LP.HasVerifiedBadge,
+        gameId=game.GameId,
+        placeId=game.PlaceId,
+        jobId=game.JobId
+    }
+    local raw=tostring(sig.userId)..sig.name..tostring(sig.accountAge)..tostring(sig.gameId)
+    local hash=0
+    for i=1,#raw do
+        hash=(hash*31+string.byte(raw,i))%2147483647
+    end
+    sig.hash=hash
+    sig.isEncrypted=(hash%2==0)
+    return sig
+end
+
+local function ReadCharFlag()
+    local c=LP.Character
+    if not c then return false end
+    for _,v in pairs(c:GetChildren())do
+        local n=v.Name:lower()
+        if n:find("encrypt")or n:find("lock")or n:find("secure")or n:find("locked")then
+            if v:IsA("BoolValue")and v.Value then return true end
+            if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
+        end
+    end
+    return false
+end
+
+local function ReadPlayerFlag()
+    for _,v in pairs(LP:GetChildren())do
+        local n=v.Name:lower()
+        if n:find("encrypt")or n:find("lock")or n:find("secure")then
+            if v:IsA("BoolValue")and v.Value then return true end
+            if v:IsA("StringValue")and (v.Value=="true"or v.Value=="1")then return true end
+        end
+    end
+    return false
+end
+
+local function ReadGlobalFlag()
+    for _,v in pairs(workspace:GetChildren())do
+        local n=v.Name:lower()
+        if n:find("encrypt")or n:find("security")then
+            if v:IsA("BoolValue")and v.Value then return true end
+        end
+    end
+    return false
+end
+
+local function CheckEncrypted()
+    local sig=ReadAccountSignature()
+    if ReadCharFlag()then return true,sig end
+    if ReadPlayerFlag()then return true,sig end
+    if ReadGlobalFlag()then return true,sig end
+    if sig.isEncrypted then return true,sig end
+    return false,sig
+end
 local StatusBar=Instance.new("Frame")
-StatusBar.Size=UDim2.new(0,220,0,32)
+StatusBar.Size=UDim2.new(0,240,0,32)
 StatusBar.Position=UDim2.new(0,10,0,10)
 StatusBar.BackgroundColor3=Color3.fromRGB(30,30,45)
 StatusBar.BackgroundTransparency=0.2
@@ -48,25 +112,59 @@ local StatusLabel=Instance.new("TextLabel")
 StatusLabel.Size=UDim2.new(1,-35,1,0)
 StatusLabel.Position=UDim2.new(0,28,0,0)
 StatusLabel.BackgroundTransparency=1
-StatusLabel.Text="🔒 账号已加密 - 请解密"
-StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
+StatusLabel.Text="🔍 正在检测账号状态..."
+StatusLabel.TextColor3=Color3.fromRGB(200,200,220)
 StatusLabel.Font=Enum.Font.GothamBold
-StatusLabel.TextSize=11
+StatusLabel.TextSize=10
 StatusLabel.TextXAlignment=Enum.TextXAlignment.Left
 StatusLabel.Parent=StatusBar
 
-local function UpdateStatus()
-    if DecryptCfg.decrypted then
-        StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
-        StatusLabel.Text="✅ 账号已解密 - 功能可用"
+local decryptSteps={"读取账号签名...","比对属性哈希...","生成客户端密钥...","绑定会话...","解密完成"}
+
+local function DoDecrypt(sig)
+    task.spawn(function()
+        for i,step in ipairs(decryptSteps)do
+            StatusLabel.Text="⏳ "..step
+            StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
+            task.wait(0.15+sig.hash%3*0.05)
+        end
+        DecryptCfg.decrypted=true
+        StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
         StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
-    else
-        StatusDot.BackgroundColor3=Color3.fromRGB(255,80,80)
-        StatusLabel.Text="🔒 账号已加密 - 请解密"
-        StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
-    end
+        StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
+    end)
 end
-UpdateStatus()
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+        local enc,sig=CheckEncrypted()
+        DecryptCfg.encrypted=enc
+        if enc then
+            if not DecryptCfg.decrypted then
+                if DecryptCfg.autoDecrypt then
+                    StatusLabel.Text="⚠️ 检测到加密，自动解密中..."
+                    StatusLabel.TextColor3=Color3.fromRGB(255,150,80)
+                    StatusDot.BackgroundColor3=Color3.fromRGB(255,180,80)
+                    DoDecrypt(sig)
+                else
+                    StatusLabel.Text="🔒 账号已加密 - 请手动解密"
+                    StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
+                    StatusDot.BackgroundColor3=Color3.fromRGB(255,80,80)
+                end
+            else
+                StatusLabel.Text="✅ 已解密 ("..tostring(sig.hash)..")"
+                StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
+                StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
+            end
+        else
+            DecryptCfg.decrypted=true
+            StatusLabel.Text="✅ 账号未加密 - 功能可用"
+            StatusLabel.TextColor3=Color3.fromRGB(150,255,180)
+            StatusDot.BackgroundColor3=Color3.fromRGB(80,255,120)
+        end
+    end
+end)
 
 local Features={}
 local FeatureState={}
@@ -158,8 +256,8 @@ KeyBtn.TextSize=16
 KeyBtn.Parent=Main
 Instance.new("UICorner",KeyBtn).CornerRadius=UDim.new(0,12)
 local Panel=Instance.new("Frame")
-Panel.Size=UDim2.new(0,280,0,500)
-Panel.Position=UDim2.new(0.5,-140,0.5,-250)
+Panel.Size=UDim2.new(0,280,0,520)
+Panel.Position=UDim2.new(0.5,-140,0.5,-260)
 Panel.BackgroundColor3=Color3.fromRGB(255,240,245)
 Panel.BackgroundTransparency=0.05
 Panel.Active=true
@@ -231,7 +329,6 @@ local AimCfg={range=250,min=50,max=800,step=50,useRange=true}
 local HitboxCfg={scale=3,step=0.5,min=1,max=10}
 local WallCfg={lockedY=nil,method=0}
 local GameEnv={speedMethod="WalkSpeed",speedHooked=nil}
-local kickLog={}
 
 local B1=Btn("自瞄")
 local B2=Btn("透视")
@@ -241,7 +338,6 @@ local B5=Btn("物品追踪")
 local B6=Btn("高跳")
 local B7=Btn("坠落无伤")
 local B8=Btn("范围:开")
-local B9=Btn("防踢:关")
 local B10=Btn("头顶显示")
 local B11=Btn("秒交互")
 local B12=Btn("无后摇")
@@ -250,44 +346,50 @@ local B14=Btn("自动闪避")
 
 local panelBottom=36+math.ceil(BTN_INDEX/2)*30
 
--- 解密按钮
 local DecryptBtn=Instance.new("TextButton")
-DecryptBtn.Size=UDim2.new(0,240,0,32)
+DecryptBtn.Size=UDim2.new(0,240,0,30)
 DecryptBtn.Position=UDim2.new(0,15,0,panelBottom+5)
 DecryptBtn.BackgroundColor3=Color3.fromRGB(255,80,80)
-DecryptBtn.Text="🔒 开始解密账号"
+DecryptBtn.Text="🔒 手动解密"
 DecryptBtn.TextColor3=Color3.fromRGB(255,255,255)
 DecryptBtn.Font=Enum.Font.GothamBold
 DecryptBtn.TextSize=11
 Instance.new("UICorner",DecryptBtn).CornerRadius=UDim.new(0,6)
 DecryptBtn.Parent=Panel
 
-local decryptSteps={"读取账号信息...","校验签名...","生成本地密钥...","绑定客户端...","完成解密"}
-
 DecryptBtn.MouseButton1Click:Connect(function()
     if DecryptCfg.decrypted then
         DecryptCfg.decrypted=false
-        DecryptBtn.Text="🔒 开始解密账号"
+        DecryptBtn.Text="🔒 手动解密"
         DecryptBtn.BackgroundColor3=Color3.fromRGB(255,80,80)
-        UpdateStatus()
         return
     end
-    task.spawn(function()
-        for i,step in ipairs(decryptSteps)do
-            DecryptBtn.Text="⏳ "..step
-            DecryptBtn.BackgroundColor3=Color3.fromRGB(255,180,80)
-            local hash=0
-            for c in LP.UserId:gsub("-","") do hash=hash+(tonumber(c) or 0) end
-            task.wait(0.2+hash%3*0.1)
-        end
-        DecryptCfg.decrypted=true
-        DecryptBtn.Text="✅ 已解密 - 点击重新加密"
-        DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
-        UpdateStatus()
-    end)
+    local enc,sig=CheckEncrypted()
+    DecryptBtn.Text="⏳ 解密中..."
+    DecryptBtn.BackgroundColor3=Color3.fromRGB(255,180,80)
+    task.wait(0.5)
+    DoDecrypt(sig)
+    DecryptBtn.Text="✅ 已解密"
+    DecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
 end)
 
--- 参数面板
+local AutoDecryptBtn=Instance.new("TextButton")
+AutoDecryptBtn.Size=UDim2.new(0,240,0,24)
+AutoDecryptBtn.Position=UDim2.new(0,15,0,panelBottom+40)
+AutoDecryptBtn.BackgroundColor3=Color3.fromRGB(80,200,120)
+AutoDecryptBtn.Text="自动解密: 开"
+AutoDecryptBtn.TextColor3=Color3.fromRGB(255,255,255)
+AutoDecryptBtn.Font=Enum.Font.GothamBold
+AutoDecryptBtn.TextSize=10
+Instance.new("UICorner",AutoDecryptBtn).CornerRadius=UDim.new(0,6)
+AutoDecryptBtn.Parent=Panel
+
+AutoDecryptBtn.MouseButton1Click:Connect(function()
+    DecryptCfg.autoDecrypt=not DecryptCfg.autoDecrypt
+    AutoDecryptBtn.BackgroundColor3=DecryptCfg.autoDecrypt and Color3.fromRGB(80,200,120) or Color3.fromRGB(255,80,80)
+    AutoDecryptBtn.Text=DecryptCfg.autoDecrypt and "自动解密: 开" or "自动解密: 关"
+end)
+
 local function MakeSlider(name,yPos,getText,onSub,onAdd)
     local p=Instance.new("Frame")
     p.Size=UDim2.new(0,240,0,26)
@@ -330,17 +432,17 @@ local function MakeSlider(name,yPos,getText,onSub,onAdd)
     return lb
 end
 
-MakeSlider("速度",panelBottom+42,
+MakeSlider("速度",panelBottom+70,
     function() return "速度: "..SpeedCfg.value end,
     function() SpeedCfg.value=math.max(SpeedCfg.min,SpeedCfg.value-SpeedCfg.step) end,
     function() SpeedCfg.value=math.min(SpeedCfg.max,SpeedCfg.value+SpeedCfg.step) end
 )
-MakeSlider("范围",panelBottom+70,
+MakeSlider("范围",panelBottom+98,
     function() return "范围: "..AimCfg.range end,
     function() AimCfg.range=math.max(AimCfg.min,AimCfg.range-AimCfg.step) end,
     function() AimCfg.range=math.min(AimCfg.max,AimCfg.range+AimCfg.step) end
 )
-MakeSlider("碰撞",panelBottom+98,
+MakeSlider("碰撞",panelBottom+126,
     function() return "碰撞: x"..HitboxCfg.scale end,
     function() HitboxCfg.scale=math.max(HitboxCfg.min,HitboxCfg.scale-HitboxCfg.step) end,
     function() HitboxCfg.scale=math.min(HitboxCfg.max,HitboxCfg.scale+HitboxCfg.step) end
@@ -419,201 +521,6 @@ local function GetRingTarget()
     end
     return best
 end
-local KW={"kick","ban","flag","detect","check","suspect","punish","report","anti","hack","cheat","violation","warn","alert","spy","watch","log","audit","monitor","verify"}
-
-local function Enable80AntiKick()
-    pcall(function()
-        LP.Kick=function(self,msg)
-            table.insert(kickLog,{m=1,msg=tostring(msg),t=os.time()})
-            warn("[防踢1] 拦截Kick")
-            return nil
-        end
-    end)
-    pcall(function()
-        local mt=getmetatable(LP)
-        if mt and mt.__index then
-            local old=mt.__index
-            mt.__index=function(t,k)
-                if k=="Kick"then table.insert(kickLog,{m=2,t=os.time()}) return function() return nil end end
-                return old(t,k)
-            end
-        end
-    end)
-    pcall(function()
-        local mt=getmetatable(LP)
-        if mt and mt.__namecall then
-            local old=mt.__namecall
-            mt.__namecall=newcclosure(function(self,...)
-                if getnamecallmethod()=="Kick"then
-                    table.insert(kickLog,{m=3,t=os.time()})
-                    return nil
-                end
-                return old(self,...)
-            end)
-        end
-    end)
-    pcall(function()
-        local mt=getmetatable(LP)
-        if mt and mt.__newindex then
-            local old=mt.__newindex
-            mt.__newindex=function(t,k,v)
-                if k=="Kick"then return end
-                return old(t,k,v)
-            end
-        end
-    end)
-    pcall(function()
-        Players.PlayerRemoving:Connect(function(p)
-            if p==LP then table.insert(kickLog,{m=5,t=os.time()}) end
-        end)
-    end)
-    for _,svcName in ipairs({"LogService","GuiService","StarterGui","ContextActionService","SoundService","Chat"})do
-        pcall(function()
-            local svc=game:GetService(svcName)
-            if svc then table.insert(kickLog,{m=6+_,t=os.time(),svc=svcName}) end
-        end)
-    end
-end
-local function Enable80AntiKickContinue()
-    for i,kw in ipairs(KW)do
-        task.spawn(function()
-            while FeatureState.antiKick do
-                task.wait(3)
-                pcall(function()
-                    for _,v in pairs(workspace:GetDescendants())do
-                        if v:IsA("BoolValue")and v.Name:lower():find(kw)then v:Destroy() end
-                    end
-                    for _,v in pairs(LP:GetDescendants())do
-                        if v:IsA("BoolValue")and v.Name:lower():find(kw)then v:Destroy() end
-                    end
-                end)
-            end
-        end)
-    end
-    for i,kw in ipairs(KW)do
-        task.spawn(function()
-            while FeatureState.antiKick do
-                task.wait(3)
-                pcall(function()
-                    for _,v in pairs(workspace:GetDescendants())do
-                        if v:IsA("StringValue")and v.Name:lower():find(kw)then v:Destroy() end
-                    end
-                end)
-            end
-        end)
-    end
-    for i,kw in ipairs(KW)do
-        task.spawn(function()
-            while FeatureState.antiKick do
-                task.wait(3)
-                pcall(function()
-                    for _,v in pairs(workspace:GetDescendants())do
-                        if v:IsA("NumberValue")and v.Name:lower():find(kw)then v:Destroy() end
-                    end
-                end)
-            end
-        end)
-    end
-end
-local function Enable80AntiKickFinish()
-    for i,kw in ipairs({"kick","ban","punish","detect","flag"})do
-        pcall(function()
-            for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants())do
-                if v:IsA("RemoteEvent")and v.Name:lower():find(kw)then
-                    pcall(function() v.OnClientEvent=function() end end)
-                end
-            end
-        end)
-    end
-    for i,kw in ipairs({"kick","ban"})do
-        pcall(function()
-            for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants())do
-                if v:IsA("RemoteFunction")and v.Name:lower():find(kw)then
-                    pcall(function() v.OnClientInvoke=function() return nil end end)
-                end
-            end
-        end)
-    end
-    task.spawn(function()
-        while FeatureState.antiKick do
-            task.wait(5)
-            pcall(function() game:GetService("LogService"):Clear() end)
-        end
-    end)
-    task.spawn(function()
-        while FeatureState.antiKick do
-            task.wait(30)
-            pcall(function()
-                local h=GetHum()
-                if h then
-                    h.Jump=true
-                    task.wait(0.1)
-                    h.Jump=false
-                end
-            end)
-        end
-    end)
-end
-
-RegisterFeature("antiKick",{
-    onEnable=function()
-        Enable80AntiKick()
-        Enable80AntiKickContinue()
-        Enable80AntiKickFinish()
-        print("[防踢] 80种方法已启动")
-    end,
-    onDisable=function()
-        print("[防踢] 已关闭")
-    end
-})
-local AutoAntiCfg={enabled=true,autoAntiKick=true,autoClean=true,autoCamouflage=true}
-
-local function HasAnyFeatureOn()
-    for k,on in pairs(FeatureState)do
-        if on and k~="antiKick"then return true end
-    end
-    return false
-end
-
-task.spawn(function()
-    while true do
-        task.wait(2)
-        if AutoAntiCfg.enabled and AutoAntiCfg.autoClean then
-            pcall(function()
-                for _,v in pairs(workspace:GetDescendants())do
-                    if v:IsA("BoolValue")or v:IsA("StringValue")then
-                        local n=v.Name:lower()
-                        if n:find("detect")or n:find("check")or n:find("flag")then v:Destroy() end
-                    end
-                end
-            end)
-        end
-        if AutoAntiCfg.enabled and AutoAntiCfg.autoCamouflage then
-            pcall(function()
-                local h=GetHum()
-                if h then
-                    if h.WalkSpeed>80 then h.WalkSpeed=60 end
-                    if h.JumpPower>150 then h.JumpPower=120 end
-                end
-            end)
-        end
-    end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(1)
-        if AutoAntiCfg.enabled and AutoAntiCfg.autoAntiKick and HasAnyFeatureOn() then
-            if not FeatureState.antiKick then
-                FeatureState.antiKick=true
-                B9.BackgroundColor3=Color3.fromRGB(144,238,144)
-                B9.Text="防踢:开"
-                local c=Features.antiKick
-                if c and c.onEnable then pcall(c.onEnable) end
-            end
-        end
-    end
-end)
 RegisterFeature("speed",{
     run=function()
         local h=GetHum()
@@ -774,7 +681,6 @@ RegisterFeature("bt",{
         lockedTarget=nil
     end
 })
-
 local function UpdateHeadDisplay()
     for i=#headList,1,-1 do
         local item=headList[i]
@@ -847,7 +753,6 @@ task.spawn(function()
         if FeatureState.fastInteract and DecryptCfg.decrypted then
             pcall(function()
                 for _,v in pairs(workspace:GetDescendants())do
-                    -- 读取模式：优先读取属性
                     if v:IsA("ProximityPrompt")then
                         if v.HoldDuration~=0 then v.HoldDuration=0 end
                         if v.MaxActivationDistance~=200 then v.MaxActivationDistance=200 end
@@ -861,6 +766,7 @@ task.spawn(function()
         end
     end
 end)
+
 RegisterFeature("noCooldown",{
     run=function()
         local c=LP.Character
@@ -873,9 +779,7 @@ RegisterFeature("noCooldown",{
         for _,v in pairs(LP.Backpack:GetChildren())do
             if v:IsA("Tool")then table.insert(toolList,v) end
         end
-        
         for _,tool in ipairs(toolList)do
-            -- 读取模式1：属性直接改
             for _,v in pairs(tool:GetDescendants())do
                 if v:IsA("NumberValue")then
                     local n=v.Name:lower()
@@ -890,93 +794,22 @@ RegisterFeature("noCooldown",{
                     end
                 end
             end
-            -- 读取模式2：工具本身的属性
             pcall(function()
                 if tool:GetAttribute("Cooldown")then tool:SetAttribute("Cooldown",0) end
                 if tool:GetAttribute("Reloading")then tool:SetAttribute("Reloading",false) end
                 if tool:GetAttribute("LastUse")then tool:SetAttribute("LastUse",0) end
                 if tool:GetAttribute("FireRate")then tool:SetAttribute("FireRate",0.01) end
             end)
-            -- 算法模式：推算配置内的冷却
             for _,v in pairs(tool:GetDescendants())do
                 if v:IsA("Configuration")then
                     for _,child in pairs(v:GetChildren())do
                         if child:IsA("NumberValue")then
                             local n=child.Name:lower()
-                            if n:find("cd")or n:find("rate")or n:find("delay")then
-                                child.Value=0
-                            end
+                            if n:find("cd")or n:find("rate")or n:find("delay")then child.Value=0 end
                         end
                     end
                 end
             end
-        end
-    end
-})
-local DodgeCfg={range=20,cooldown=0}
-
-local function GetNearestThreat()
-    local r=GetRoot()
-    if not r then return nil end
-    local best,bD=nil,DodgeCfg.range
-    for _,v in pairs(workspace:GetDescendants())do
-        if v:IsA("BasePart")then
-            local n=v.Name:lower()
-            local isThreat=false
-            if n:find("bullet")or n:find("projectile")or n:find("missile")then isThreat=true end
-            if isThreat then
-                -- 读取：先读速度
-                local speed=v.AssemblyLinearVelocity.Magnitude
-                if speed>5 then
-                    local toMe=(r.Position-v.Position).Unit
-                    local velDir=v.AssemblyLinearVelocity.Unit
-                    local dot=toMe:Dot(velDir)
-                    if dot>0.7 then
-                        local dist=(r.Position-v.Position).Magnitude
-                        if dist<bD then bD=dist best=v end
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
-
-local function CalculateDodgeDir(threat)
-    local r=GetRoot()
-    if not r then return Vector3.new(0,0,0) end
-    local toMe=(r.Position-threat.Position).Unit
-    local side=Vector3.new(-toMe.Z,0,toMe.X)
-    local away=toMe
-    local dodgeDir=(side*0.7+away*0.3).Unit
-    return dodgeDir
-end
-
-RegisterFeature("dodge",{
-    run=function()
-        if DodgeCfg.cooldown>0 then
-            DodgeCfg.cooldown=DodgeCfg.cooldown-1
-            return
-        end
-        local threat=GetNearestThreat()
-        if not threat then return end
-        local r=GetRoot()
-        if not r then return end
-        local dir=CalculateDodgeDir(threat)
-        local h=GetHum()
-        if h then
-            -- 读取当前速度作为基准
-            local currentSpeed=h.WalkSpeed
-            local dodgeSpeed=math.max(currentSpeed,30)
-            -- 读取模式：如果有BodyVelocity，用它
-            local bv=r:FindFirstChildOfClass("BodyVelocity")
-            if bv then
-                bv.Velocity=dir*dodgeSpeed+Vector3.new(0,15,0)
-            else
-                -- 算法模式：写 AssemblyLinearVelocity
-                r.AssemblyLinearVelocity=dir*dodgeSpeed+Vector3.new(0,15,0)
-            end
-            DodgeCfg.cooldown=15
         end
     end
 })
@@ -1062,12 +895,75 @@ RegisterFeature("hitbox",{
     run=function() ApplyHitbox() end,
     onDisable=function() RestoreHitbox() end
 })
+local DodgeCfg={range=20,cooldown=0}
+
+local function GetNearestThreat()
+    local r=GetRoot()
+    if not r then return nil end
+    local best,bD=nil,DodgeCfg.range
+    for _,v in pairs(workspace:GetDescendants())do
+        if v:IsA("BasePart")then
+            local n=v.Name:lower()
+            local isThreat=false
+            if n:find("bullet")or n:find("projectile")or n:find("missile")then isThreat=true end
+            if isThreat then
+                local speed=v.AssemblyLinearVelocity.Magnitude
+                if speed>5 then
+                    local toMe=(r.Position-v.Position).Unit
+                    local velDir=v.AssemblyLinearVelocity.Unit
+                    local dot=toMe:Dot(velDir)
+                    if dot>0.7 then
+                        local dist=(r.Position-v.Position).Magnitude
+                        if dist<bD then bD=dist best=v end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function CalculateDodgeDir(threat)
+    local r=GetRoot()
+    if not r then return Vector3.new(0,0,0) end
+    local toMe=(r.Position-threat.Position).Unit
+    local side=Vector3.new(-toMe.Z,0,toMe.X)
+    local away=toMe
+    return (side*0.7+away*0.3).Unit
+end
+
+RegisterFeature("dodge",{
+    run=function()
+        if DodgeCfg.cooldown>0 then
+            DodgeCfg.cooldown=DodgeCfg.cooldown-1
+            return
+        end
+        local threat=GetNearestThreat()
+        if not threat then return end
+        local r=GetRoot()
+        if not r then return end
+        local dir=CalculateDodgeDir(threat)
+        local h=GetHum()
+        if h then
+            local currentSpeed=h.WalkSpeed
+            local dodgeSpeed=math.max(currentSpeed,30)
+            local bv=r:FindFirstChildOfClass("BodyVelocity")
+            if bv then
+                bv.Velocity=dir*dodgeSpeed+Vector3.new(0,15,0)
+            else
+                r.AssemblyLinearVelocity=dir*dodgeSpeed+Vector3.new(0,15,0)
+            end
+            DodgeCfg.cooldown=15
+        end
+    end
+})
 local function HandleToggle(key,btn,onT,offT)
     if not DecryptCfg.decrypted then
         StatusLabel.Text="⚠️ 请先点菜单里的【开始解密】"
         StatusLabel.TextColor3=Color3.fromRGB(255,200,80)
         wait(1.5)
-        UpdateStatus()
+        StatusLabel.Text="🔒 账号未解密"
+        StatusLabel.TextColor3=Color3.fromRGB(255,150,150)
         return
     end
     local on=ToggleFeature(key)
@@ -1077,13 +973,6 @@ local function HandleToggle(key,btn,onT,offT)
     if c then
         if on and c.onEnable then pcall(c.onEnable) end
         if not on and c.onDisable then pcall(c.onDisable) end
-    end
-    if on and AutoAntiCfg.autoAntiKick and not FeatureState.antiKick then
-        FeatureState.antiKick=true
-        B9.BackgroundColor3=Color3.fromRGB(144,238,144)
-        B9.Text="防踢:开"
-        local akC=Features.antiKick
-        if akC and akC.onEnable then pcall(akC.onEnable) end
     end
 end
 
@@ -1109,7 +998,6 @@ B8.MouseButton1Click:Connect(function()
     B8.BackgroundColor3=AimCfg.useRange and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
     B8.Text=AimCfg.useRange and "范围:开" or "范围:关"
 end)
-B9.MouseButton1Click:Connect(function() HandleToggle("antiKick",B9,"防踢:开","防踢:关") end)
 B10.MouseButton1Click:Connect(function() HandleToggle("head",B10) end)
 B11.MouseButton1Click:Connect(function() HandleToggle("fastInteract",B11) end)
 B12.MouseButton1Click:Connect(function() HandleToggle("noCooldown",B12) end)
@@ -1125,15 +1013,6 @@ KeyBtn.MouseButton1Click:Connect(function()
         if #k>0 then ok=true end
     end
     if ok then Main.Visible=false Panel.Visible=true end
-end)
-
-UIS.InputBegan:Connect(function(input,gp)
-    if not gp and input.KeyCode==Enum.KeyCode.F6 then
-        print("[防踢] 拦截记录:")
-        if #kickLog==0 then print("  (无记录)") else
-            for i,log in pairs(kickLog)do print("  "..i..". 方法"..(log.m or "?")..(log.msg and (" | "..log.msg) or "")) end
-        end
-    end
 end)
 local Ball=Instance.new("TextButton")
 Ball.Size=UDim2.new(0,44,0,44)
@@ -1176,7 +1055,6 @@ task.spawn(function()
             if math.abs(h.WalkSpeed-100)>5 then GameEnv.speedMethod="Hook" end
             pcall(function() h.WalkSpeed=old end)
         end
-        print("[环境] 加速方案:"..GameEnv.speedMethod)
     end)
 end)
 
@@ -1184,21 +1062,4 @@ RunService.RenderStepped:Connect(function(dt)
     RunAllFeatures(dt)
 end)
 
-local AutoPanel=Instance.new("TextButton")
-AutoPanel.Size=UDim2.new(0,240,0,24)
-AutoPanel.Position=UDim2.new(0,15,0,panelBottom+132)
-AutoPanel.BackgroundColor3=Color3.fromRGB(144,238,144)
-AutoPanel.Text="自动防检测: 开"
-AutoPanel.TextColor3=Color3.fromRGB(255,255,255)
-AutoPanel.Font=Enum.Font.GothamBold
-AutoPanel.TextSize=10
-Instance.new("UICorner",AutoPanel).CornerRadius=UDim.new(0,6)
-AutoPanel.Parent=Panel
-
-AutoPanel.MouseButton1Click:Connect(function()
-    AutoAntiCfg.enabled=not AutoAntiCfg.enabled
-    AutoPanel.BackgroundColor3=AutoAntiCfg.enabled and Color3.fromRGB(144,238,144) or Color3.fromRGB(255,105,180)
-    AutoPanel.Text=AutoAntiCfg.enabled and "自动防检测: 开" or "自动防检测: 关"
-end)
-
-print("樱の辅助 V14 加载完成 - 解密+80防踢+闪避+读取优先")
+print("樱の辅助 V15 加载完成")
